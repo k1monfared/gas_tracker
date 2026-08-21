@@ -39,6 +39,10 @@
         .hero h1 { font-size: 3rem; color: #fff; letter-spacing: 2px; margin-bottom: 8px; }
         .hero h1 span { color: #4FC3F7; }
         .hero p { font-size: 1.1rem; color: #8b949e; margin-bottom: 28px; max-width: 520px; margin-left: auto; margin-right: auto; }
+        .hero img.logo {
+            width: 120px; height: 120px; border-radius: 50%;
+            margin-bottom: 20px; box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+        }
         .btn {
             display: inline-block; padding: 13px 30px; border-radius: 8px;
             font-size: 0.95rem; font-weight: 600; margin: 6px; transition: all 0.2s;
@@ -111,6 +115,7 @@
 
 <div class="container">
     <div class="hero">
+        <img src="logo-512.png" alt="Gas Tracker logo" class="logo">
         <div class="badge">v0.2.0 &middot; GPL v3 &middot; Android 10+</div>
         <h1>Gas<span>Tracker</span></h1>
         <p>Fuel usage and cost tracking for one car. Manual, odometer, or photo entry with on-device OCR.</p>

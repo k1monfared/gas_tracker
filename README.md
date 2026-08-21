@@ -1,5 +1,7 @@
 # Gas Tracker
 
+<img src="docs/logo-512.png" alt="Gas Tracker logo" width="120" height="120">
+
 **Fuel usage and cost tracking for one car**
 
 [Website](http://k1monfared.com/gas_tracker/) | [Download APK](https://github.com/k1monfared/gas_tracker/releases/latest) | [Changelog](CHANGELOG.md)
