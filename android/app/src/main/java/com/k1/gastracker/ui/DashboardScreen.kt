@@ -16,8 +16,10 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -26,6 +28,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.k1.gastracker.core.Dataset
 import com.k1.gastracker.core.PeriodKind
+import com.k1.gastracker.core.Refill
 import com.k1.gastracker.core.buildDataset
 import com.k1.gastracker.core.efficiencySeries
 import com.k1.gastracker.core.flowValue
@@ -33,26 +36,40 @@ import com.k1.gastracker.core.periodSeries
 import com.k1.gastracker.core.recentWindow
 import com.k1.gastracker.core.windowRatios
 import com.k1.gastracker.core.yearlyView
-import com.k1.gastracker.ui.LineChart
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 import java.util.Locale
 
 private val PERIOD_LABELS = listOf("Daily", "Weekly", "Monthly", "Yearly")
 private val PERIOD_DAYS = listOf(1.0, 7.0, 28.0, 365.0)
+private val CHART_CURRENCIES = listOf("EUR", "USD", "GBP", "CAD", "CHF", "SEK", "NOK", "DKK", "PLN", "CZK", "TRY")
+
+private enum class ConsumptionType(val label: String) {
+    L_PER_100_KM("L/100km"),
+    MPG("mpg"),
+    KM_PER_L("km/L"),
+}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun DashboardScreen(state: UiState) {
+fun DashboardScreen(state: UiState, viewModel: AppViewModel) {
     val today = LocalDate.now()
-    val convertedRefills = remember(state.refills, state.homeCurrency, state.convertedCosts) {
+
+    var chartCurrency by rememberSaveable { mutableStateOf(state.homeCurrency) }
+    var chartCosts by remember { mutableStateOf<Map<Refill, Double?>>(emptyMap()) }
+
+    LaunchedEffect(state.refills, chartCurrency) {
+        chartCosts = viewModel.convertedCosts(chartCurrency)
+    }
+
+    val convertedRefills = remember(state.refills, chartCosts, chartCurrency) {
         state.refills.map { refill ->
-            val converted = state.convertedCosts[refill]
-            if (refill.currency == state.homeCurrency || converted == null) {
-                refill.copy(currency = state.homeCurrency)
-            } else {
-                refill.copy(cost = converted, currency = state.homeCurrency)
+            val cost = when {
+                refill.cost == null -> null
+                refill.currency == chartCurrency -> refill.cost
+                else -> chartCosts[refill]
             }
+            refill.copy(cost = cost, currency = chartCurrency)
         }
     }
     val dataset = remember(convertedRefills) {
@@ -62,6 +79,8 @@ fun DashboardScreen(state: UiState) {
     var periodIndex by rememberSaveable { mutableIntStateOf(2) }
     val periodLabel = PERIOD_LABELS[periodIndex]
     val periodDays = PERIOD_DAYS[periodIndex]
+
+    var consumptionType by rememberSaveable { mutableStateOf(ConsumptionType.L_PER_100_KM) }
 
     val window = remember(dataset, today) { recentWindow(dataset.samples, today) }
     val ratioSamples = remember(dataset, today, periodIndex) {
@@ -90,6 +109,20 @@ fun DashboardScreen(state: UiState) {
             )
         }
 
+        Text("Chart currency", style = MaterialTheme.typography.titleSmall)
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            CHART_CURRENCIES.forEach { currency ->
+                FilterChip(
+                    selected = chartCurrency == currency,
+                    onClick = { chartCurrency = currency },
+                    label = { Text(currency) },
+                )
+            }
+        }
+
         FlowRow(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -113,12 +146,12 @@ fun DashboardScreen(state: UiState) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 StatCard(
                     "Yearly average spend",
-                    money(yearly.extrapolatedCost, state.homeCurrency),
+                    money(yearly.extrapolatedCost, chartCurrency),
                     Modifier.weight(1f),
                 )
                 StatCard(
                     "Past year spend",
-                    money(yearly.actualCost, state.homeCurrency),
+                    money(yearly.actualCost, chartCurrency),
                     Modifier.weight(1f),
                 )
             }
@@ -138,7 +171,7 @@ fun DashboardScreen(state: UiState) {
             val spend = flowValue(window.costPerDay, periodDays)
             val distance = flowValue(window.distancePerDay, periodDays)
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatCard("$periodLabel spend", money(spend, state.homeCurrency), Modifier.weight(1f))
+                StatCard("$periodLabel spend", money(spend, chartCurrency), Modifier.weight(1f))
                 StatCard("$periodLabel distance", km(distance), Modifier.weight(1f))
             }
         }
@@ -148,8 +181,8 @@ fun DashboardScreen(state: UiState) {
             StatCard("Efficiency", unit(ratios.mpg, "mpg"), Modifier.weight(1f))
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatCard("Cost per km", money(ratios.costPerKm, state.homeCurrency), Modifier.weight(1f))
-            StatCard("Avg price", money(ratios.avgPricePerLiter, state.homeCurrency) + "/L", Modifier.weight(1f))
+            StatCard("Cost per km", money(ratios.costPerKm, chartCurrency), Modifier.weight(1f))
+            StatCard("Avg price", money(ratios.avgPricePerLiter, chartCurrency) + "/L", Modifier.weight(1f))
         }
 
         ChartSection(title = "Cost per month") {
@@ -160,14 +193,50 @@ fun DashboardScreen(state: UiState) {
                 modifier = Modifier.fillMaxWidth().height(180.dp),
             )
         }
-        ChartSection(title = "Consumption per refill (L/100km)") {
+
+        ChartSection(title = "Consumption per refill") {
+            Text(
+                "Show as",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                ConsumptionType.entries.forEach { type ->
+                    FilterChip(
+                        selected = consumptionType == type,
+                        onClick = { consumptionType = type },
+                        label = { Text(type.label) },
+                    )
+                }
+            }
             val points = efficiencySeries(dataset).takeLast(12)
             LineChart(
-                values = points.map { it.lPer100Km },
+                values = points.map {
+                    when (consumptionType) {
+                        ConsumptionType.L_PER_100_KM -> it.lPer100Km
+                        ConsumptionType.MPG -> it.mpg
+                        ConsumptionType.KM_PER_L -> it.kmPerL
+                    }
+                },
                 labels = points.map { "${it.date.monthValue}/${it.date.dayOfMonth}" },
                 modifier = Modifier.fillMaxWidth().height(180.dp),
                 padStart = 28.dp,
                 emptyLabel = "No distance data",
+            )
+        }
+
+        ChartSection(title = "Price per liter (${chartCurrency})") {
+            val points = efficiencySeries(dataset).takeLast(12).filter { it.pricePerVolume != null }
+            LineChart(
+                values = points.map { it.pricePerVolume ?: 0.0 },
+                labels = points.map { "${it.date.monthValue}/${it.date.dayOfMonth}" },
+                modifier = Modifier.fillMaxWidth().height(180.dp),
+                padStart = 28.dp,
+                emptyLabel = "No cost data",
             )
         }
     }

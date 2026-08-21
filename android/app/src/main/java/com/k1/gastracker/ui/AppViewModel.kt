@@ -103,6 +103,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(editingRefill = null) }
     }
 
+    suspend fun convertedCosts(targetCurrency: String): Map<Refill, Double?> {
+        return fxRepo.convertedCosts(_state.value.refills, targetCurrency)
+    }
+
     fun saveRefill(refill: Refill) {
         _state.update { current ->
             val old = current.editingRefill

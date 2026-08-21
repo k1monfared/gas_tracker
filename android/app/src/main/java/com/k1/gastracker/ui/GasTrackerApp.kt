@@ -44,7 +44,7 @@ fun GasTrackerApp(viewModel: AppViewModel = viewModel()) {
             }
             when (tab) {
                 0 -> LogScreen(state, viewModel)
-                1 -> DashboardScreen(state)
+                1 -> DashboardScreen(state, viewModel)
                 2 -> HistoryScreen(state, viewModel)
                 else -> SettingsScreen(state, viewModel)
             }

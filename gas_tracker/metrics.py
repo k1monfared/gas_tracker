@@ -21,6 +21,7 @@ class EfficiencyPoint:
     mpg: float
     km_per_l: float
     cost_per_km: float | None = None
+    price_per_liter: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,6 +118,7 @@ def efficiency_series(data: Dataset) -> list[EfficiencyPoint]:
             continue
         km_per_l = d / s.volume_l
         cost_per_km = s.cost / d if s.cost is not None else None
+        price_per_liter = s.cost / s.volume_l if s.cost is not None else None
         points.append(
             EfficiencyPoint(
                 date=s.date,
@@ -124,6 +126,7 @@ def efficiency_series(data: Dataset) -> list[EfficiencyPoint]:
                 mpg=km_to_miles(d) / liters_to_gallons(s.volume_l),
                 km_per_l=km_per_l,
                 cost_per_km=cost_per_km,
+                price_per_liter=price_per_liter,
             )
         )
     return points

@@ -12,6 +12,7 @@ data class EfficiencyPoint(
     val mpg: Double,
     val kmPerL: Double,
     val costPerKm: Double? = null,
+    val pricePerVolume: Double? = null,
 )
 
 data class PeriodPoint(
@@ -106,6 +107,7 @@ fun efficiencySeries(data: Dataset): List<EfficiencyPoint> = data.samples.mapNot
             mpg = kmToMiles(d) / litersToGallons(s.volumeL),
             kmPerL = d / s.volumeL,
             costPerKm = s.cost?.div(d),
+            pricePerVolume = s.cost?.div(s.volumeL),
         )
     }
 }
