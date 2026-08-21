@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gas Tracker - Fuel usage and cost tracking for Android</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0d1117;
+            color: #c9d1d9;
+            line-height: 1.6;
+        }
+        a { color: #4FC3F7; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .container { max-width: 960px; margin: 0 auto; padding: 0 24px; }
+
+        nav {
+            position: sticky; top: 0; z-index: 100;
+            background: rgba(13,17,23,0.92);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid #21262d;
+            padding: 12px 0;
+        }
+        nav .container { display: flex; align-items: center; justify-content: space-between; }
+        nav .logo { color: #fff; font-weight: 700; font-size: 1.1rem; letter-spacing: 1px; }
+        nav .logo span { color: #4FC3F7; }
+        nav .links a { color: #8b949e; margin-left: 24px; font-size: 0.9rem; }
+        nav .links a:hover { color: #fff; text-decoration: none; }
+
+        .hero { text-align: center; padding: 64px 0 40px; }
+        .hero .badge {
+            display: inline-block;
+            background: #1a1a2e; border: 1px solid #30363d;
+            border-radius: 20px; padding: 4px 16px;
+            font-size: 0.82rem; color: #8b949e; margin-bottom: 20px;
+        }
+        .hero h1 { font-size: 3rem; color: #fff; letter-spacing: 2px; margin-bottom: 8px; }
+        .hero h1 span { color: #4FC3F7; }
+        .hero p { font-size: 1.1rem; color: #8b949e; margin-bottom: 28px; max-width: 520px; margin-left: auto; margin-right: auto; }
+        .btn {
+            display: inline-block; padding: 13px 30px; border-radius: 8px;
+            font-size: 0.95rem; font-weight: 600; margin: 6px; transition: all 0.2s;
+        }
+        .btn:hover { text-decoration: none; transform: translateY(-1px); }
+        .btn-primary { background: #4FC3F7; color: #0d1117; }
+        .btn-primary:hover { background: #81D4FA; }
+        .btn-outline { background: transparent; color: #4FC3F7; border: 1px solid #4FC3F7; }
+        .btn-outline:hover { background: rgba(79,195,247,0.1); }
+
+        .screenshots { padding: 32px 0 48px; }
+        .screenshots h2 { text-align: center; font-size: 1.5rem; color: #fff; margin-bottom: 24px; }
+        .screenshot-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+        }
+        .screenshot {
+            background: #161b22;
+            border: 1px solid #21262d;
+            border-radius: 12px;
+            overflow: hidden;
+            padding: 8px;
+        }
+        .screenshot img {
+            width: 100%; height: auto; display: block;
+            border-radius: 8px;
+        }
+        .screenshot p {
+            text-align: center; font-size: 0.85rem; color: #8b949e; margin-top: 8px;
+        }
+
+        section { padding: 48px 0; border-top: 1px solid #21262d; }
+        section h2 { font-size: 1.5rem; color: #fff; margin-bottom: 20px; }
+
+        .features { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .feature {
+            background: #161b22; border: 1px solid #21262d;
+            border-radius: 8px; padding: 20px;
+        }
+        .feature h3 { color: #4FC3F7; font-size: 1rem; margin-bottom: 8px; }
+        .feature p { font-size: 0.9rem; color: #8b949e; }
+        @media (max-width: 600px) { .features { grid-template-columns: 1fr; } }
+
+        .install pre {
+            background: #161b22; border: 1px solid #21262d;
+            border-radius: 8px; padding: 16px;
+            overflow-x: auto; font-size: 0.85rem; color: #c9d1d9;
+        }
+
+        footer {
+            text-align: center; padding: 40px 0;
+            border-top: 1px solid #21262d;
+            color: #8b949e; font-size: 0.85rem;
+        }
+    </style>
+</head>
+<body>
+
+<nav>
+    <div class="container">
+        <div class="logo">Gas<span>Tracker</span></div>
+        <div class="links">
+            <a href="#features">Features</a>
+            <a href="#install">Install</a>
+            <a href="https://github.com/k1monfared/gas_tracker">GitHub</a>
+        </div>
+    </div>
+</nav>
+
+<div class="container">
+    <div class="hero">
+        <div class="badge">v0.1.0 &middot; MIT &middot; Android 10+</div>
+        <h1>Gas<span>Tracker</span></h1>
+        <p>Fuel usage and cost tracking for one car. Manual, odometer, or photo entry with on-device OCR.</p>
+        <a href="https://github.com/k1monfared/gas_tracker/releases/latest" class="btn btn-primary">Download APK</a>
+        <a href="https://github.com/k1monfared/gas_tracker" class="btn btn-outline">Source Code</a>
+    </div>
+
+    <div class="screenshots">
+        <h2>Screenshots</h2>
+        <div class="screenshot-grid">
+            <div class="screenshot">
+                <img src="screenshots/log.png" alt="Log refill screen with photo entry buttons">
+                <p>Log refill with photo entry</p>
+            </div>
+            <div class="screenshot">
+                <img src="screenshots/ocr.png" alt="OCR drafts prefilled into the form">
+                <p>OCR drafts auto-prefilled</p>
+            </div>
+            <div class="screenshot">
+                <img src="screenshots/dashboard.png" alt="Dashboard with metrics">
+                <p>Dashboard metrics</p>
+            </div>
+            <div class="screenshot">
+                <img src="screenshots/history.png" alt="History of refills">
+                <p>Refill history</p>
+            </div>
+        </div>
+    </div>
+
+    <section id="features">
+        <h2>Features</h2>
+        <div class="features">
+            <div class="feature">
+                <h3>Manual or odometer entry</h3>
+                <p>Enter distance driven or current odometer reading. The app computes the rest.</p>
+            </div>
+            <div class="feature">
+                <h3>Photo / OCR entry</h3>
+                <p>Take or pick photos of the pump or odometer. Tesseract OCR extracts values and the app classifies the photo type.</p>
+            </div>
+            <div class="feature">
+                <h3>Dashboard</h3>
+                <p>Track cost per period, efficiency in L/100km and MPG, and average price per liter.</p>
+            </div>
+            <div class="feature">
+                <h3>Private and offline</h3>
+                <p>Data stays on your device. Optional FX conversion uses cached ECB rates.</p>
+            </div>
+        </div>
+    </section>
+
+    <section id="install">
+        <h2>Install</h2>
+        <p>Download the latest APK from <a href="https://github.com/k1monfared/gas_tracker/releases/latest">GitHub Releases</a> and open it on your Android 10+ device.</p>
+        <p style="margin-top: 12px;">For automatic updates, use <a href="https://github.com/ImranR98/Obtainium">Obtainium</a> pointed at this repository.</p>
+        <h3 style="color: #fff; margin-top: 24px; font-size: 1.1rem;">Build from source</h3>
+        <pre>git clone https://github.com/k1monfared/gas_tracker.git
+cd gas_tracker/android
+./gradlew assembleDebug
+# APK at app/build/outputs/apk/debug/app-debug.apk</pre>
+    </section>
+
+    <footer>
+        <p>Gas Tracker is released under the <a href="https://github.com/k1monfared/gas_tracker/blob/master/LICENSE">MIT License</a>.</p>
+    </footer>
+</div>
+
+</body>
+</html>
