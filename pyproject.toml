@@ -1,0 +1,9 @@
+[project]
+name = "gas-tracker"
+version = "0.1.0"
+description = "Fuel usage and cost tracking core library"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
