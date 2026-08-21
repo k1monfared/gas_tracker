@@ -2,7 +2,7 @@
 
 **Fuel usage and cost tracking for one car**
 
-[Website](https://k1monfared.github.io/gas_tracker/) | [Download APK](https://github.com/k1monfared/gas_tracker/releases/latest) | [Changelog](CHANGELOG.md)
+[Website](http://k1monfared.com/gas_tracker/) | [Download APK](https://github.com/k1monfared/gas_tracker/releases/latest) | [Changelog](CHANGELOG.md)
 
 **Status**: POC | **Version**: 0.1.0 | **License**: MIT | **Min Android**: 10.0+
 
