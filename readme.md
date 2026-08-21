@@ -9,12 +9,13 @@ Two implementations of the same core:
 
 ## What it does
 
-Each refill records date, distance driven, fuel filled, total cost, optional octane level,
-and optional gas station, with selectable units (km/mi, L/gal) and currency. The processing
-pipeline then:
+Each refill records date, distance driven or current odometer, fuel filled, total cost,
+optional octane level, and optional gas station, with selectable units (km/mi, L/gal) and
+currency. The processing pipeline then:
 
 - canonicalizes everything to km and liters
 - merges same-day refills so double refills cannot produce infinite consumption
+- computes distance automatically from consecutive odometer readings
 - interpolates missing distances linearly over cumulative distance
 - estimates missing costs from the interpolated price per liter
 - converts foreign currencies to your chosen home currency using ECB reference rates from

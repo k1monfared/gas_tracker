@@ -15,6 +15,7 @@ class Sample:
     distance_km: float | None = None
     cost: float | None = None
     currency: str = "USD"
+    odometer_km: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,7 +36,24 @@ def _canonical(refill: Refill) -> Sample:
         distance_km=refill.distance_km,
         cost=refill.cost,
         currency=refill.currency,
+        odometer_km=refill.odometer_km,
     )
+
+
+def _distances_from_odometer(samples: list[Sample]) -> list[Sample]:
+    out: list[Sample] = []
+    prev: float | None = None
+    for s in samples:
+        distance = s.distance_km
+        odo = s.odometer_km
+        if distance is None and odo is not None and prev is not None:
+            distance = odo - prev
+            if distance is not None and distance < 0:
+                distance = None
+        out.append(replace(s, distance_km=distance))
+        if odo is not None:
+            prev = odo
+    return out
 
 
 def merge_same_day(samples: Sequence[Sample]) -> list[Sample]:
@@ -53,13 +71,18 @@ def merge_same_day(samples: Sequence[Sample]) -> list[Sample]:
                 return None
             return sum(values)
 
+        odometers = [s.odometer_km for s in group if s.odometer_km is not None]
+        merged_odometer = max(odometers) if odometers else None
+        merged_distance = None if merged_odometer is not None else coalesce("distance_km")
+
         merged.append(
             Sample(
                 date=date,
                 volume_l=sum(s.volume_l for s in group),
-                distance_km=coalesce("distance_km"),
+                distance_km=merged_distance,
                 cost=coalesce("cost"),
                 currency=currencies.pop(),
+                odometer_km=merged_odometer,
             )
         )
     return merged
@@ -123,7 +146,9 @@ def build_dataset(refills: Iterable[Refill]) -> Dataset:
     currencies = {s.currency for s in samples}
     if len(currencies) > 1:
         raise ValueError(f"mixed currencies in dataset: {sorted(currencies)}")
-    merged = merge_same_day(samples)
+    ordered = sorted(samples, key=lambda s: s.date)
+    merged = merge_same_day(ordered)
+    merged = _distances_from_odometer(merged)
     merged = _interpolate_distances(merged)
     merged = _interpolate_costs(merged)
     return Dataset(samples=tuple(merged))

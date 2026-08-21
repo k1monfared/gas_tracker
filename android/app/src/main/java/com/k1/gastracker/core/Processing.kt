@@ -8,6 +8,7 @@ data class Sample(
     val distanceKm: Double? = null,
     val cost: Double? = null,
     val currency: String = "USD",
+    val odometerKm: Double? = null,
 )
 
 data class Dataset(val samples: List<Sample>) {
@@ -21,7 +22,24 @@ private fun canonical(refill: Refill): Sample = Sample(
     distanceKm = refill.distanceKm,
     cost = refill.cost,
     currency = refill.currency,
+    odometerKm = refill.odometerKm,
 )
+
+private fun distancesFromOdometer(samples: List<Sample>): List<Sample> {
+    val out = ArrayList<Sample>(samples.size)
+    var prev: Double? = null
+    for (s in samples) {
+        var distance = s.distanceKm
+        val odo = s.odometerKm
+        if (distance == null && odo != null && prev != null) {
+            distance = odo - prev
+            if (distance < 0) distance = null
+        }
+        out.add(s.copy(distanceKm = distance))
+        if (odo != null) prev = odo
+    }
+    return out
+}
 
 fun mergeSameDay(samples: List<Sample>): List<Sample> = samples
     .sortedBy { it.date }
@@ -33,12 +51,17 @@ fun mergeSameDay(samples: List<Sample>): List<Sample> = samples
         fun coalesce(field: (Sample) -> Double?): Double? =
             if (group.any { field(it) == null }) null else group.sumOf { field(it)!! }
 
+        val odometers = group.mapNotNull { it.odometerKm }
+        val mergedOdometer = if (odometers.isEmpty()) null else odometers.max()
+        val mergedDistance = if (mergedOdometer != null) null else coalesce { it.distanceKm }
+
         Sample(
             date = date,
             volumeL = group.sumOf { it.volumeL },
-            distanceKm = coalesce { it.distanceKm },
+            distanceKm = mergedDistance,
             cost = coalesce { it.cost },
             currency = currencies.first(),
+            odometerKm = mergedOdometer,
         )
     }
 
@@ -105,6 +128,8 @@ fun buildDataset(refills: List<Refill>): Dataset {
     if (refills.isEmpty()) return Dataset(emptyList())
     val currencies = refills.map { it.currency }.toSet()
     require(currencies.size == 1) { "mixed currencies in dataset: ${currencies.sorted()}" }
-    val merged = mergeSameDay(refills.map(::canonical))
-    return Dataset(interpolateCosts(interpolateDistances(merged)))
+    val ordered = refills.map(::canonical).sortedBy { it.date }
+    val merged = mergeSameDay(ordered)
+    val computed = distancesFromOdometer(merged)
+    return Dataset(interpolateCosts(interpolateDistances(computed)))
 }

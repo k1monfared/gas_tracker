@@ -21,6 +21,7 @@ private data class RefillDto(
     val currency: String = "USD",
     val octane: Int? = null,
     val station: String? = null,
+    val odometer: Double? = null,
 )
 
 @Serializable
@@ -58,6 +59,7 @@ private fun RefillDto.toDomain() = Refill(
     currency = currency,
     octane = octane,
     station = station,
+    odometer = odometer,
 )
 
 private fun Refill.toDto() = RefillDto(
@@ -70,4 +72,5 @@ private fun Refill.toDto() = RefillDto(
     currency = currency,
     octane = octane,
     station = station,
+    odometer = odometer,
 )

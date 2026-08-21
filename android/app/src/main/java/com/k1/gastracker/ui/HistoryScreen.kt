@@ -59,6 +59,7 @@ private fun RefillRow(refill: Refill, state: UiState, viewModel: AppViewModel) {
                 Text(
                     buildString {
                         append(fmtVolume(refill))
+                        refill.odometer?.let { append("  ·  ${trim(it)} ${refill.distanceUnit.label}") }
                         refill.distance?.let { append("  ·  ${trim(it)} ${refill.distanceUnit.label}") }
                         refill.cost?.let { append("  ·  ${trim(it)} ${refill.currency}") }
                         converted?.let {

@@ -10,8 +10,8 @@ Two parts:
 - `gas_tracker/`: Python core library (reference implementation)
 - `android/`: Kotlin Android app (Jetpack Compose) with a mirrored Kotlin port of the core
 
-Spec and roadmap live in `readme.log`. Milestone 1 (manual entry + dashboard) is implemented;
-milestones 2 (odometer-based input) and 3 (photo/OCR entry) are future work.
+Spec and roadmap live in `readme.log`. Milestone 1 (manual entry + dashboard) and
+milestone 2 (odometer-based input) are implemented; milestone 3 (photo/OCR entry) is future work.
 
 ## Commands
 

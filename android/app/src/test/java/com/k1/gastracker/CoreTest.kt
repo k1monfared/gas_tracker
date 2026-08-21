@@ -368,3 +368,40 @@ class FxTest {
         assertNull(convertAmount(100.0, null))
     }
 }
+
+class OdometerTest {
+    @Test
+    fun distanceComputedFromOdometer() {
+        val data = buildDataset(
+            listOf(
+                Refill(LocalDate.parse("2026-01-01"), 40.0, odometer = 1000.0),
+                Refill(LocalDate.parse("2026-02-01"), 40.0, odometer = 1500.0),
+                Refill(LocalDate.parse("2026-03-01"), 40.0, odometer = 2100.0),
+            )
+        )
+        val distances = data.samples.map { it.distanceKm }
+        assertNull(distances[0])
+        assertEquals(500.0, distances[1]!!, 1e-9)
+        assertEquals(600.0, distances[2]!!, 1e-9)
+    }
+
+    @Test
+    fun sameDayDoubleRefillWithOdometer() {
+        val data = buildDataset(
+            listOf(
+                Refill(LocalDate.parse("2026-04-01"), 30.0, odometer = 1000.0),
+                Refill(LocalDate.parse("2026-05-01"), 30.0, odometer = 1500.0),
+                Refill(LocalDate.parse("2026-05-01"), 10.0, odometer = 1550.0),
+            )
+        )
+        assertEquals(2, data.samples.size)
+        assertNull(data.samples[0].distanceKm)
+        assertEquals(550.0, data.samples[1].distanceKm!!, 1e-9)
+        assertEquals(40.0, data.samples[1].volumeL, 1e-9)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun negativeOdometerRejected() {
+        Refill(LocalDate.parse("2026-01-01"), 10.0, odometer = -5.0)
+    }
+}

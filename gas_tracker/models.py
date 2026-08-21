@@ -17,6 +17,7 @@ class Refill:
     currency: str = "USD"
     octane: int | None = None
     station: str | None = None
+    odometer: float | None = None
 
     def __post_init__(self) -> None:
         if self.volume <= 0:
@@ -27,6 +28,8 @@ class Refill:
             raise ValueError("cost cannot be negative")
         if self.octane is not None and self.octane < 0:
             raise ValueError("octane cannot be negative")
+        if self.odometer is not None and self.odometer < 0:
+            raise ValueError("odometer cannot be negative")
 
     @property
     def volume_l(self) -> float:
@@ -37,3 +40,9 @@ class Refill:
         if self.distance is None:
             return None
         return to_km(self.distance, self.distance_unit)
+
+    @property
+    def odometer_km(self) -> float | None:
+        if self.odometer is None:
+            return None
+        return to_km(self.odometer, self.distance_unit)

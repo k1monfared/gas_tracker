@@ -127,6 +127,39 @@ def test_mixed_currencies_raise():
         )
 
 
+def test_distance_computed_from_odometer():
+    data = build_dataset(
+        [
+            Refill(date=dt.date(2026, 1, 1), volume=40, odometer=1000),
+            Refill(date=dt.date(2026, 2, 1), volume=40, odometer=1500),
+            Refill(date=dt.date(2026, 3, 1), volume=40, odometer=2100),
+        ]
+    )
+    distances = [s.distance_km for s in data.samples]
+    assert distances[0] is None
+    assert distances[1] == pytest.approx(500)
+    assert distances[2] == pytest.approx(600)
+
+
+def test_same_day_double_refill_with_odometer():
+    data = build_dataset(
+        [
+            Refill(date=dt.date(2026, 4, 1), volume=30, odometer=1000),
+            Refill(date=dt.date(2026, 5, 1), volume=30, odometer=1500),
+            Refill(date=dt.date(2026, 5, 1), volume=10, odometer=1550),
+        ]
+    )
+    assert len(data.samples) == 2
+    assert data.samples[0].distance_km is None
+    assert data.samples[1].distance_km == pytest.approx(550)
+    assert data.samples[1].volume_l == pytest.approx(40)
+
+
+def test_negative_odometer_rejected():
+    with pytest.raises(ValueError):
+        Refill(date=dt.date(2026, 1, 1), volume=10, odometer=-5)
+
+
 def test_invalid_refill_rejected():
     with pytest.raises(ValueError):
         r("2026-01-01", 0)

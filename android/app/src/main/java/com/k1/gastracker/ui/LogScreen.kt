@@ -16,6 +16,7 @@ import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -24,6 +25,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -46,7 +48,9 @@ private fun parseInt(s: String): Int? =
 
 @Composable
 fun LogScreen(state: UiState, viewModel: AppViewModel) {
+    var useOdometer by remember { mutableStateOf(false) }
     var distanceText by remember { mutableStateOf("") }
+    var odometerText by remember { mutableStateOf("") }
     var volumeText by remember { mutableStateOf("") }
     var costText by remember { mutableStateOf("") }
     var octaneText by remember { mutableStateOf("") }
@@ -57,14 +61,18 @@ fun LogScreen(state: UiState, viewModel: AppViewModel) {
 
     LaunchedEffect(state.editingRefill) {
         state.editingRefill?.let { r ->
+            useOdometer = r.odometer != null
             distanceText = r.distance?.toString() ?: ""
+            odometerText = r.odometer?.toString() ?: ""
             volumeText = r.volume.toString()
             costText = r.cost?.toString() ?: ""
             octaneText = r.octane?.toString() ?: ""
             stationText = r.station ?: ""
             date = r.date
         } ?: run {
+            useOdometer = false
             distanceText = ""
+            odometerText = ""
             volumeText = ""
             costText = ""
             octaneText = ""
@@ -105,23 +113,54 @@ fun LogScreen(state: UiState, viewModel: AppViewModel) {
         if (state.editingRefill != null) {
             Text("Editing refill", style = MaterialTheme.typography.titleMedium)
         }
-        OutlinedTextField(
-            value = distanceText,
-            onValueChange = { distanceText = it },
-            label = { Text("Distance driven") },
-            supportingText = { Text("since previous refill, optional") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            singleLine = true,
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
             modifier = Modifier.fillMaxWidth(),
-            trailingIcon = {
-                Selector(
-                    selected = state.lastDistanceUnit,
-                    options = DistanceUnit.entries,
-                    label = { it.label },
-                    onSelect = { viewModel.setDistanceUnit(it) },
-                )
-            },
-        )
+        ) {
+            Text("Use current odometer")
+            Switch(
+                checked = useOdometer,
+                onCheckedChange = { useOdometer = it },
+            )
+        }
+        if (useOdometer) {
+            OutlinedTextField(
+                value = odometerText,
+                onValueChange = { odometerText = it },
+                label = { Text("Odometer reading") },
+                supportingText = { Text("current mileage on the car") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                trailingIcon = {
+                    Selector(
+                        selected = state.lastDistanceUnit,
+                        options = DistanceUnit.entries,
+                        label = { it.label },
+                        onSelect = { viewModel.setDistanceUnit(it) },
+                    )
+                },
+            )
+        } else {
+            OutlinedTextField(
+                value = distanceText,
+                onValueChange = { distanceText = it },
+                label = { Text("Distance driven") },
+                supportingText = { Text("since previous refill, optional") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                trailingIcon = {
+                    Selector(
+                        selected = state.lastDistanceUnit,
+                        options = DistanceUnit.entries,
+                        label = { it.label },
+                        onSelect = { viewModel.setDistanceUnit(it) },
+                    )
+                },
+            )
+        }
         OutlinedTextField(
             value = volumeText,
             onValueChange = { volumeText = it },
@@ -187,11 +226,14 @@ fun LogScreen(state: UiState, viewModel: AppViewModel) {
                             volumeError = "enter a positive amount"
                         else -> {
                             volumeError = null
+                            val distance = parseNumber(distanceText)
+                            val odometer = parseNumber(odometerText)
                             viewModel.saveRefill(
                                 Refill(
                                     date = date,
                                     volume = volume,
-                                    distance = parseNumber(distanceText),
+                                    distance = if (useOdometer) null else distance,
+                                    odometer = if (useOdometer) odometer else null,
                                     cost = parseNumber(costText),
                                     distanceUnit = state.lastDistanceUnit,
                                     volumeUnit = state.lastVolumeUnit,
@@ -201,6 +243,7 @@ fun LogScreen(state: UiState, viewModel: AppViewModel) {
                                 )
                             )
                             distanceText = ""
+                            odometerText = ""
                             volumeText = ""
                             costText = ""
                             octaneText = ""
