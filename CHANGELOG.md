@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.2.0
+
+- Odometer photo drafts infer distance travelled from previous refills, including through manually entered distance refills.
+- Manual form shows both distance and odometer fields and updates one from the other in real time.
+- Odometer reading is validated against the previous logged value.
+- Warn when fuel efficiency is more than 1.5x the past average, with save anyway / cancel options.
+- Camera capture and photo auto-classification (pump / odometer / receipt).
+
 ## v0.1.0
 
 - Manual refill entry: volume, cost, distance, date, octane, station.

@@ -4,7 +4,7 @@
 
 [Website](http://k1monfared.com/gas_tracker/) | [Download APK](https://github.com/k1monfared/gas_tracker/releases/latest) | [Changelog](CHANGELOG.md)
 
-**Status**: POC | **Version**: 0.1.0 | **License**: MIT | **Min Android**: 10.0+
+**Status**: POC | **Version**: 0.2.0 | **License**: MIT | **Min Android**: 10.0+
 
 ---
 
