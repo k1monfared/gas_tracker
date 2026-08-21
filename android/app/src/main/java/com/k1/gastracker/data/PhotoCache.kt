@@ -68,6 +68,7 @@ class PhotoCache(private val context: Context) {
         val volume: Double? = null,
         val cost: Double? = null,
         val odometer: Double? = null,
+        val distanceKm: Double? = null,
         val station: String? = null,
         val receiptDate: String? = null,
     )
@@ -79,6 +80,7 @@ class PhotoCache(private val context: Context) {
         volume = volume,
         cost = cost,
         odometer = odometer,
+        distanceKm = distanceKm,
         station = station,
         receiptDate = receiptDate,
     )
@@ -90,6 +92,7 @@ class PhotoCache(private val context: Context) {
         volume = volume,
         cost = cost,
         odometer = odometer,
+        distanceKm = distanceKm,
         station = station,
         receiptDate = receiptDate,
     )

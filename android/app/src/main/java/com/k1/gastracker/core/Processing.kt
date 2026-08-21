@@ -124,6 +124,51 @@ private fun interpolateCosts(samples: List<Sample>): List<Sample> {
     }
 }
 
+private fun odometerAtDateKm(date: LocalDate, refills: List<Refill>): Double? {
+    val prior = refills.sortedBy { it.date }.filter { !it.date.isAfter(date) }
+    if (prior.isEmpty()) return null
+    return if (prior.last().odometer != null) {
+        prior.last().odometerKm!!
+    } else {
+        val anchorIndex = prior.indexOfLast { it.odometer != null }
+        if (anchorIndex == -1) return null
+        var sum = prior[anchorIndex].odometerKm!!
+        for (i in anchorIndex + 1 until prior.size) {
+            val d = prior[i].distanceKm ?: return null
+            sum += d
+        }
+        sum
+    }
+}
+
+fun inferDistanceFromOdometer(
+    currentOdometer: Double,
+    currentDate: LocalDate,
+    currentUnit: DistanceUnit,
+    refills: List<Refill>,
+): Double? {
+    val prevKm = odometerAtDateKm(currentDate, refills) ?: return null
+    val distanceKm = toKm(currentOdometer, currentUnit) - prevKm
+    return if (distanceKm >= 0) distanceKm else null
+}
+
+fun previousOdometerForDate(
+    date: LocalDate,
+    unit: DistanceUnit,
+    refills: List<Refill>,
+): Double? {
+    val prevKm = odometerAtDateKm(date, refills) ?: return null
+    return fromKm(prevKm, unit)
+}
+
+fun pastAverageEfficiency(refills: List<Refill>): Double? {
+    val data = buildDataset(refills).samples
+        .filter { it.distanceKm != null && it.distanceKm > 0 }
+    if (data.isEmpty()) return null
+    val efficiencies = data.map { it.volumeL / it.distanceKm!! * 100.0 }
+    return efficiencies.average()
+}
+
 fun buildDataset(refills: List<Refill>): Dataset {
     if (refills.isEmpty()) return Dataset(emptyList())
     val currencies = refills.map { it.currency }.toSet()

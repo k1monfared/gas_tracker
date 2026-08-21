@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -27,7 +28,6 @@ import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -47,6 +47,11 @@ import com.k1.gastracker.core.OcrTarget
 import com.k1.gastracker.core.PhotoDraft
 import com.k1.gastracker.core.Refill
 import com.k1.gastracker.core.VolumeUnit
+import com.k1.gastracker.core.fromKm
+import com.k1.gastracker.core.pastAverageEfficiency
+import com.k1.gastracker.core.previousOdometerForDate
+import com.k1.gastracker.core.toKm
+import com.k1.gastracker.core.toLiters
 import com.k1.gastracker.ui.components.Selector
 import androidx.core.content.FileProvider
 import java.io.File
@@ -93,7 +98,6 @@ fun LogScreen(state: UiState, viewModel: AppViewModel) {
         if (uri != null) viewModel.processPhoto(uri)
     }
 
-    var useOdometer by remember { mutableStateOf(false) }
     var distanceText by remember { mutableStateOf("") }
     var odometerText by remember { mutableStateOf("") }
     var volumeText by remember { mutableStateOf("") }
@@ -103,11 +107,41 @@ fun LogScreen(state: UiState, viewModel: AppViewModel) {
     var date by remember { mutableStateOf(LocalDate.now()) }
     var showPicker by remember { mutableStateOf(false) }
     var volumeError by remember { mutableStateOf<String?>(null) }
+    var odometerError by remember { mutableStateOf<String?>(null) }
+    var showEfficiencyDialog by remember { mutableStateOf(false) }
+    var pendingRefill by remember { mutableStateOf<Refill?>(null) }
+
+    val relevantRefills = state.editingRefill?.let { state.refills - it } ?: state.refills
+    val previousOdometer = remember(date, relevantRefills, state.lastDistanceUnit) {
+        previousOdometerForDate(date, state.lastDistanceUnit, relevantRefills)
+    }
+
+    fun syncFromDistance() {
+        val distance = parseNumber(distanceText)
+        if (distance != null && distance >= 0 && previousOdometer != null) {
+            odometerText = "%.1f".format(previousOdometer + distance)
+            odometerError = null
+        }
+    }
+
+    fun syncFromOdometer() {
+        val odometer = parseNumber(odometerText)
+        if (odometer != null && previousOdometer != null) {
+            if (odometer < previousOdometer) {
+                odometerError = "cannot be less than previous ${"%.1f".format(previousOdometer)} ${state.lastDistanceUnit.label}"
+                distanceText = ""
+            } else {
+                odometerError = null
+                distanceText = "%.1f".format(odometer - previousOdometer)
+            }
+        } else {
+            odometerError = null
+        }
+    }
 
     LaunchedEffect(state.editingRefill, state.photoDrafts) {
         val source = state.editingRefill
         if (source != null) {
-            useOdometer = source.odometer != null
             distanceText = source.distance?.toString() ?: ""
             odometerText = source.odometer?.toString() ?: ""
             volumeText = source.volume.toString()
@@ -121,11 +155,11 @@ fun LogScreen(state: UiState, viewModel: AppViewModel) {
                 draft.cost?.let { costText = it.toString() }
                 draft.odometer?.let { odo ->
                     odometerText = odo.toString()
-                    useOdometer = true
+                    syncFromOdometer()
                 }
+                draft.distanceKm?.let { distanceText = fromKm(it, state.lastDistanceUnit).toString() }
             }
             if (state.photoDrafts.isEmpty()) {
-                useOdometer = false
                 distanceText = ""
                 odometerText = ""
                 volumeText = ""
@@ -157,6 +191,29 @@ fun LogScreen(state: UiState, viewModel: AppViewModel) {
         ) {
             DatePicker(state = pickerState)
         }
+    }
+
+    if (showEfficiencyDialog && pendingRefill != null) {
+        AlertDialog(
+            onDismissRequest = { showEfficiencyDialog = false },
+            title = { Text("Unusual fuel efficiency") },
+            text = {
+                Text(
+                    "This refill's efficiency is much higher than your recent average. " +
+                        "Did you forget to log a refill? You can save anyway or cancel and add it first."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingRefill?.let { viewModel.saveRefill(it) }
+                    showEfficiencyDialog = false
+                    pendingRefill = null
+                }) { Text("Save anyway") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEfficiencyDialog = false }) { Text("Cancel") }
+            },
+        )
     }
 
     Column(
@@ -214,54 +271,53 @@ fun LogScreen(state: UiState, viewModel: AppViewModel) {
             }
         }
 
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
+        OutlinedTextField(
+            value = distanceText,
+            onValueChange = {
+                distanceText = it
+                syncFromDistance()
+            },
+            label = { Text("Distance driven") },
+            supportingText = { Text("since previous refill") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            singleLine = true,
             modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text("Use current odometer")
-            Switch(
-                checked = useOdometer,
-                onCheckedChange = { useOdometer = it },
-            )
-        }
-        if (useOdometer) {
-            OutlinedTextField(
-                value = odometerText,
-                onValueChange = { odometerText = it },
-                label = { Text("Odometer reading") },
-                supportingText = { Text("current mileage on the car") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                trailingIcon = {
-                    Selector(
-                        selected = state.lastDistanceUnit,
-                        options = DistanceUnit.entries,
-                        label = { it.label },
-                        onSelect = { viewModel.setDistanceUnit(it) },
-                    )
-                },
-            )
-        } else {
-            OutlinedTextField(
-                value = distanceText,
-                onValueChange = { distanceText = it },
-                label = { Text("Distance driven") },
-                supportingText = { Text("since previous refill, optional") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                trailingIcon = {
-                    Selector(
-                        selected = state.lastDistanceUnit,
-                        options = DistanceUnit.entries,
-                        label = { it.label },
-                        onSelect = { viewModel.setDistanceUnit(it) },
-                    )
-                },
-            )
-        }
+            trailingIcon = {
+                Selector(
+                    selected = state.lastDistanceUnit,
+                    options = DistanceUnit.entries,
+                    label = { it.label },
+                    onSelect = { viewModel.setDistanceUnit(it) },
+                )
+            },
+        )
+        OutlinedTextField(
+            value = odometerText,
+            onValueChange = {
+                odometerText = it
+                syncFromOdometer()
+            },
+            label = { Text("Odometer reading") },
+            isError = odometerError != null,
+            supportingText = {
+                if (previousOdometer != null) {
+                    Text(odometerError ?: "previous logged: ${"%.1f".format(previousOdometer)} ${state.lastDistanceUnit.label}")
+                } else {
+                    Text(odometerError ?: "current mileage on the car")
+                }
+            },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            trailingIcon = {
+                Selector(
+                    selected = state.lastDistanceUnit,
+                    options = DistanceUnit.entries,
+                    label = { it.label },
+                    onSelect = { viewModel.setDistanceUnit(it) },
+                )
+            },
+        )
         OutlinedTextField(
             value = volumeText,
             onValueChange = { volumeText = it },
@@ -322,33 +378,49 @@ fun LogScreen(state: UiState, viewModel: AppViewModel) {
             Button(
                 onClick = {
                     val volume = parseNumber(volumeText)
+                    val distance = parseNumber(distanceText)
+                    val odometer = parseNumber(odometerText)
                     when {
                         volume == null || volume <= 0 ->
                             volumeError = "enter a positive amount"
+                        odometer != null && previousOdometer != null && odometer < previousOdometer ->
+                            odometerError = "cannot be less than previous ${"%.1f".format(previousOdometer)} ${state.lastDistanceUnit.label}"
                         else -> {
                             volumeError = null
-                            val distance = parseNumber(distanceText)
-                            val odometer = parseNumber(odometerText)
-                            viewModel.saveRefill(
-                                Refill(
-                                    date = date,
-                                    volume = volume,
-                                    distance = if (useOdometer) null else distance,
-                                    odometer = if (useOdometer) odometer else null,
-                                    cost = parseNumber(costText),
-                                    distanceUnit = state.lastDistanceUnit,
-                                    volumeUnit = state.lastVolumeUnit,
-                                    currency = state.lastInputCurrency,
-                                    octane = parseInt(octaneText),
-                                    station = stationText.takeIf { it.isNotBlank() },
-                                )
+                            odometerError = null
+                            val refill = Refill(
+                                date = date,
+                                volume = volume,
+                                distance = distance?.takeIf { it > 0 },
+                                odometer = odometer?.takeIf { it > 0 },
+                                cost = parseNumber(costText),
+                                distanceUnit = state.lastDistanceUnit,
+                                volumeUnit = state.lastVolumeUnit,
+                                currency = state.lastInputCurrency,
+                                octane = parseInt(octaneText),
+                                station = stationText.takeIf { it.isNotBlank() },
                             )
-                            distanceText = ""
-                            odometerText = ""
-                            volumeText = ""
-                            costText = ""
-                            octaneText = ""
-                            stationText = ""
+                            val distanceKm = when {
+                                distance != null && distance > 0 -> toKm(distance, state.lastDistanceUnit)
+                                odometer != null && previousOdometer != null -> toKm(odometer - previousOdometer, state.lastDistanceUnit)
+                                else -> null
+                            }
+                            val currentEff = if (distanceKm != null && distanceKm > 0) {
+                                toLiters(volume, state.lastVolumeUnit) / distanceKm * 100.0
+                            } else null
+                            val avgEff = pastAverageEfficiency(relevantRefills)
+                            if (avgEff != null && currentEff != null && currentEff > avgEff * 1.5) {
+                                pendingRefill = refill
+                                showEfficiencyDialog = true
+                            } else {
+                                viewModel.saveRefill(refill)
+                                distanceText = ""
+                                odometerText = ""
+                                volumeText = ""
+                                costText = ""
+                                octaneText = ""
+                                stationText = ""
+                            }
                         }
                     }
                 },
@@ -401,8 +473,9 @@ private fun PhotoDraftCard(
                                 .joinToString(" / ").ifEmpty { "No values found" }
                         }
                         OcrTarget.ODOMETER -> {
-                            draft.odometer?.let { "%.1f ${distanceUnit.label}".format(it) }
-                                ?: "No odometer found"
+                            val odo = draft.odometer?.let { "%.1f ${distanceUnit.label}".format(it) } ?: "No odometer found"
+                            val dist = draft.distanceKm?.let { "%.1f ${distanceUnit.label} inferred".format(fromKm(it, distanceUnit)) }
+                            listOfNotNull(odo, dist).joinToString(" / ")
                         }
                         OcrTarget.RECEIPT -> {
                             val vol = draft.volume?.let { "%.2f L".format(it) }

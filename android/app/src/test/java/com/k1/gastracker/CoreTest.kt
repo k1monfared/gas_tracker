@@ -11,6 +11,10 @@ import com.k1.gastracker.core.classifyPhoto
 import com.k1.gastracker.core.convertAmount
 import com.k1.gastracker.core.efficiencySeries
 import com.k1.gastracker.core.extractNumbers
+import com.k1.gastracker.core.fromKm
+import com.k1.gastracker.core.inferDistanceFromOdometer
+import com.k1.gastracker.core.pastAverageEfficiency
+import com.k1.gastracker.core.previousOdometerForDate
 import com.k1.gastracker.core.extractOdometer
 import com.k1.gastracker.core.extractVolumeAndCost
 import com.k1.gastracker.core.flowValue
@@ -442,5 +446,76 @@ class OcrParserTest {
     @Test
     fun classifyReceiptPhoto() {
         assertEquals(OcrTarget.RECEIPT, classifyPhoto("RECEIPT\nSHELL STATION\nVAT 20%"))
+    }
+}
+
+class OdometerInferenceTest {
+    @Test
+    fun noRefillsReturnsNull() {
+        assertNull(inferDistanceFromOdometer(1000.0, LocalDate.parse("2026-02-01"), DistanceUnit.KM, emptyList()))
+    }
+
+    @Test
+    fun infersDistanceFromPreviousOdometer() {
+        val refills = listOf(
+            Refill(LocalDate.parse("2026-01-01"), 10.0, odometer = 500.0),
+        )
+        val distance = inferDistanceFromOdometer(750.0, LocalDate.parse("2026-02-01"), DistanceUnit.KM, refills)
+        assertEquals(250.0, distance!!, 1e-9)
+    }
+
+    @Test
+    fun infersDistanceThroughManualDistanceEntries() {
+        val refills = listOf(
+            Refill(LocalDate.parse("2026-01-01"), 10.0, odometer = 1000.0),
+            Refill(LocalDate.parse("2026-02-01"), 10.0, distance = 300.0),
+            Refill(LocalDate.parse("2026-03-01"), 10.0, distance = 200.0),
+        )
+        val distance = inferDistanceFromOdometer(1600.0, LocalDate.parse("2026-04-01"), DistanceUnit.KM, refills)
+        assertEquals(100.0, distance!!, 1e-9)
+    }
+
+    @Test
+    fun returnsNullWhenNoAnchorOdometerExists() {
+        val refills = listOf(
+            Refill(LocalDate.parse("2026-01-01"), 10.0, distance = 300.0),
+        )
+        assertNull(inferDistanceFromOdometer(750.0, LocalDate.parse("2026-02-01"), DistanceUnit.KM, refills))
+    }
+
+    @Test
+    fun returnsNullWhenCurrentOdometerIsSmaller() {
+        val refills = listOf(
+            Refill(LocalDate.parse("2026-01-01"), 10.0, odometer = 1000.0),
+        )
+        assertNull(inferDistanceFromOdometer(900.0, LocalDate.parse("2026-02-01"), DistanceUnit.KM, refills))
+    }
+
+    @Test
+    fun convertsUnits() {
+        val refills = listOf(
+            Refill(LocalDate.parse("2026-01-01"), 10.0, odometer = 500.0, distanceUnit = DistanceUnit.KM),
+        )
+        val distance = inferDistanceFromOdometer(1000.0, LocalDate.parse("2026-02-01"), DistanceUnit.MILE, refills)
+        assertEquals(milesToKm(1000.0) - 500.0, distance!!, 1e-9)
+    }
+
+    @Test
+    fun previousOdometerForDateUsesAnchorAndDistances() {
+        val refills = listOf(
+            Refill(LocalDate.parse("2026-01-01"), 10.0, odometer = 1000.0),
+            Refill(LocalDate.parse("2026-02-01"), 10.0, distance = 300.0),
+            Refill(LocalDate.parse("2026-03-01"), 10.0, distance = 200.0),
+        )
+        assertEquals(1500.0, previousOdometerForDate(LocalDate.parse("2026-04-01"), DistanceUnit.KM, refills)!!, 1e-9)
+    }
+
+    @Test
+    fun pastAverageEfficiencyIgnoresNullDistances() {
+        val refills = listOf(
+            Refill(LocalDate.parse("2026-01-01"), 10.0, distance = 100.0),
+            Refill(LocalDate.parse("2026-02-01"), 10.0, distance = 100.0),
+        )
+        assertEquals(10.0, pastAverageEfficiency(refills)!!, 1e-9)
     }
 }

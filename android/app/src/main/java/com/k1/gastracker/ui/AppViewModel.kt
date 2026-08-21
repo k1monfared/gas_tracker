@@ -14,6 +14,7 @@ import com.k1.gastracker.core.VolumeUnit
 import com.k1.gastracker.core.classifyPhoto
 import com.k1.gastracker.core.extractOdometer
 import com.k1.gastracker.core.extractVolumeAndCost
+import com.k1.gastracker.core.inferDistanceFromOdometer
 import com.k1.gastracker.data.FxRepository
 import com.k1.gastracker.data.PhotoCache
 import com.k1.gastracker.data.RefillStore
@@ -25,6 +26,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.time.LocalDate
 
 data class UiState(
     val refills: List<Refill> = emptyList(),
@@ -152,11 +154,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     }
                     OcrTarget.ODOMETER -> {
                         val odometer = extractOdometer(text)
+                        val distanceKm = odometer?.let {
+                            inferDistanceFromOdometer(
+                                currentOdometer = it,
+                                currentDate = LocalDate.now(),
+                                currentUnit = _state.value.lastDistanceUnit,
+                                refills = _state.value.refills,
+                            )
+                        }
                         PhotoDraft(
                             target = target,
                             imagePath = path,
                             rawText = text,
                             odometer = odometer,
+                            distanceKm = distanceKm,
                         )
                     }
                     OcrTarget.RECEIPT -> {

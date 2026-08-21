@@ -7,6 +7,7 @@ data class PhotoDraft(
     val volume: Double? = null,
     val cost: Double? = null,
     val odometer: Double? = null,
+    val distanceKm: Double? = null,
     val station: String? = null,
     val receiptDate: String? = null,
 )
