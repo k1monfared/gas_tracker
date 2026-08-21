@@ -137,4 +137,8 @@ android/app/build/outputs/apk/debug/app-debug.apk
 
 ### License
 
-Gas Tracker is released under the **MIT License**. See [LICENSE](LICENSE).
+Gas Tracker is released under the **GNU General Public License v3.0** (GPL-3.0).
+
+This means anyone can use, study, modify, and distribute the app, but any distributed derivative must also be released under GPL-3.0 and include its source code. This keeps the project and its improvements open.
+
+The bundled Tesseract OCR model and the `tess-two` library are Apache-2.0 licensed, which is compatible with GPL-3.0. Jetpack Compose and Material3 dependencies are also Apache-2.0 and compatible.
