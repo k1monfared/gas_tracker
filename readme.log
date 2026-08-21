@@ -1,31 +1,47 @@
-- the goal is to track the usage and price of gas by a car in an andorid app
-- the pov version has 1 car and assumes at each refill the user fills the tank
-    - the user enters two/three things: 
-        - how many miles they've driven
-            - a dropdown with miles/km with memory of last selection so that user doesn't need to change it every time 
-        - how many liters of gas they have filled 
-            - a dropdown of liters/gallons with memory of last selection
-        - how much the total cost is 
-            - a dropdown of currency with a memory of last selection 
-        - date (default is today)
-    - the app creates a data set and 
-        keeps track of cost and distance producing metrics such as 
-            - average cost per month/week/year
-            - miles per gallon and liters per 100km 
-            - other meaningful metrics (brainstorm on this)
-        - converges units 
-        - takes care of missing values with an interpolation
-        - takes care of double refills in a single day so that inifity is avoided 
-        - crates a dashboard with charts of gas usage and cost and other metrics from above 
-- the second milestone is 
-    - the user only enters current milage on the car and the total liters and cost 
-    - the rest of the calculations are done automatically
-- the third milestone is    
-    - the user takes 
-        a photo of the gas station numbers and
-        a photo of the car odomoeter
-    - a multimodal large model scans and finds the right numbers and verifies it with the user and takes care of the rest 
-    - optionally user takes a photo of the receipt and extra information are imported from there for other analytics 
-    - the user should be able to directly take the photo from the app, or use the gallery to add the photos. the app should figure out which photo is for what. 
-    - the choice of the model here should be minimal, if we can run a simple OCR with good results then we don't need an LLM with image, if not, we need to choose something that is cost effective and minimal setup
-- need tests 
+Gas Tracker
+
+Android app for tracking fuel usage and cost for one car, assuming a full-tank refill each time. Includes a mirrored Python reference implementation of the core logic.
+
+Milestones
+
+1. Manual entry and dashboard
+   - Enter distance driven (or use odometer), fuel volume, total cost, date, octane, station.
+   - Units: km/mi for distance, liters/gallons for volume; home/input currencies for cost.
+   - Remembers last selections.
+   - Dashboard with windowed metrics: cost per period, efficiency (L/100km, MPG), charts.
+   - Handles missing values by interpolation, merges same-day refills, converts currencies via ECB/frankfurter.dev rates cached locally.
+   - Edit/delete refills, settings for home currency and defaults, 2-year sample data.
+
+2. Odometer-based input
+   - Enter the current odometer reading instead of distance.
+   - Distance is computed automatically from consecutive readings.
+   - Same-day merges work with odometer readings.
+
+3. Photo / OCR entry
+   - Tesseract OCR runs on-device; `eng.traineddata` is bundled in the APK.
+   - User can take a photo with the camera or pick from the gallery.
+   - Photos are auto-classified as pump, odometer, or receipt using OCR-text heuristics.
+   - Extracted numbers are shown as cached drafts at the top of the Log form and prefilled into the fields.
+   - Drafts (image + parsed values) are persisted in `files/photo_cache.json` and `files/photos/` so they survive app restarts.
+   - Drafts are cleared when the refill is saved or editing is cancelled.
+   - Receipts are detected but extra fields (station, items) are not yet extracted.
+
+Notes
+
+- The bundled Tesseract model makes the debug APK about 66 MB.
+- Camera capture is implemented via a FileProvider; it works on real devices. The emulator camera app on the test AVD crashes, so camera was verified via intent setup and gallery flow only on the emulator.
+- OCR classification is rule-based and can be improved with more samples.
+
+Building and testing
+
+Python (repo root):
+  python3 -m pytest -q
+
+Android (from android/):
+  ./gradlew -Dorg.gradle.java.home=/tmp/opencode/jdk-21.0.12.1+1 :app:testDebugUnitTest :app:assembleDebug
+
+Instrumented test (emulator must be running):
+  ./gradlew -Dorg.gradle.java.home=/tmp/opencode/jdk-21.0.12.1+1 :app:connectedDebugAndroidTest
+
+Debug APK output:
+  android/app/build/outputs/apk/debug/app-debug.apk

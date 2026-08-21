@@ -2,18 +2,29 @@ package com.k1.gastracker.ui
 
 import android.app.Application
 import android.content.Context
+import android.graphics.BitmapFactory
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.k1.gastracker.core.DistanceUnit
+import com.k1.gastracker.core.OcrTarget
+import com.k1.gastracker.core.PhotoDraft
 import com.k1.gastracker.core.Refill
 import com.k1.gastracker.core.VolumeUnit
+import com.k1.gastracker.core.classifyPhoto
+import com.k1.gastracker.core.extractOdometer
+import com.k1.gastracker.core.extractVolumeAndCost
 import com.k1.gastracker.data.FxRepository
+import com.k1.gastracker.data.PhotoCache
 import com.k1.gastracker.data.RefillStore
+import com.k1.gastracker.data.TesseractOcr
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class UiState(
     val refills: List<Refill> = emptyList(),
@@ -22,6 +33,9 @@ data class UiState(
     val lastVolumeUnit: VolumeUnit = VolumeUnit.LITER,
     val lastInputCurrency: String = "EUR",
     val editingRefill: Refill? = null,
+    val photoDrafts: List<PhotoDraft> = emptyList(),
+    val photoLoading: Boolean = false,
+    val photoError: String? = null,
     val convertedCosts: Map<Refill, Double?> = emptyMap(),
     val fxLoading: Boolean = false,
     val fxError: String? = null,
@@ -30,6 +44,7 @@ data class UiState(
 class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val store = RefillStore(application)
     private val fxRepo = FxRepository(application)
+    private val photoCache = PhotoCache(application)
     private val prefs = application.getSharedPreferences("gastracker", Context.MODE_PRIVATE)
 
     private val _state = MutableStateFlow(
@@ -39,6 +54,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             lastDistanceUnit = prefs.get("distance_unit", DistanceUnit.KM),
             lastVolumeUnit = prefs.get("volume_unit", VolumeUnit.LITER),
             lastInputCurrency = prefs.getString("input_currency", null) ?: "EUR",
+            photoDrafts = photoCache.load(),
         )
     )
 
@@ -70,6 +86,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun startEditing(refill: Refill) {
+        clearPhotoDrafts()
         _state.update {
             it.copy(
                 editingRefill = refill,
@@ -94,6 +111,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
             current.copy(refills = list, editingRefill = null)
         }
+        clearPhotoDrafts()
         persist()
         refreshFx()
     }
@@ -107,6 +125,76 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         persist()
         refreshFx()
+    }
+
+    fun processPhoto(uri: Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _state.update { it.copy(photoLoading = true, photoError = null) }
+            val result = runCatching {
+                val context = getApplication<Application>()
+                val bitmap = context.contentResolver.openInputStream(uri)?.use { stream ->
+                    BitmapFactory.decodeStream(stream)
+                } ?: throw IllegalArgumentException("could not decode image")
+                val ocr = TesseractOcr(context)
+                val text = runCatching { ocr.recognize(bitmap) }.also { ocr.close() }.getOrThrow()
+                val target = classifyPhoto(text)
+                val path = photoCache.saveImage(bitmap)
+                val draft = when (target) {
+                    OcrTarget.PUMP -> {
+                        val (volume, cost) = extractVolumeAndCost(text, _state.value.lastInputCurrency)
+                        PhotoDraft(
+                            target = target,
+                            imagePath = path,
+                            rawText = text,
+                            volume = volume,
+                            cost = cost,
+                        )
+                    }
+                    OcrTarget.ODOMETER -> {
+                        val odometer = extractOdometer(text)
+                        PhotoDraft(
+                            target = target,
+                            imagePath = path,
+                            rawText = text,
+                            odometer = odometer,
+                        )
+                    }
+                    OcrTarget.RECEIPT -> {
+                        val (volume, cost) = extractVolumeAndCost(text, _state.value.lastInputCurrency)
+                        PhotoDraft(
+                            target = target,
+                            imagePath = path,
+                            rawText = text,
+                            volume = volume,
+                            cost = cost,
+                        )
+                    }
+                }
+                val drafts = photoCache.load() + draft
+                photoCache.save(drafts)
+                drafts
+            }
+            withContext(Dispatchers.Main) {
+                result.fold(
+                    onSuccess = { drafts ->
+                        _state.update { it.copy(photoDrafts = drafts, photoLoading = false, photoError = null) }
+                    },
+                    onFailure = { e ->
+                        _state.update { it.copy(photoLoading = false, photoError = e.message ?: "OCR failed") }
+                    }
+                )
+            }
+        }
+    }
+
+    fun deletePhotoDraft(draft: PhotoDraft) {
+        photoCache.delete(draft)
+        _state.update { it.copy(photoDrafts = photoCache.load()) }
+    }
+
+    fun clearPhotoDrafts() {
+        photoCache.clear()
+        _state.update { it.copy(photoDrafts = emptyList(), photoError = null) }
     }
 
     fun refillsInHomeCurrency(): List<Refill> {

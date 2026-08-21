@@ -1,13 +1,18 @@
 package com.k1.gastracker
 
 import com.k1.gastracker.core.DistanceUnit
+import com.k1.gastracker.core.OcrTarget
 import com.k1.gastracker.core.Refill
 import com.k1.gastracker.core.Sample
 import com.k1.gastracker.core.VolumeUnit
 import com.k1.gastracker.core.averageCostPerPeriod
 import com.k1.gastracker.core.buildDataset
+import com.k1.gastracker.core.classifyPhoto
 import com.k1.gastracker.core.convertAmount
 import com.k1.gastracker.core.efficiencySeries
+import com.k1.gastracker.core.extractNumbers
+import com.k1.gastracker.core.extractOdometer
+import com.k1.gastracker.core.extractVolumeAndCost
 import com.k1.gastracker.core.flowValue
 import com.k1.gastracker.core.gallonsToLiters
 import com.k1.gastracker.core.kmToMiles
@@ -363,7 +368,7 @@ class FxTest {
     }
 
     @Test
-    fun convertAmount() {
+    fun convertAmountWorks() {
         assertEquals(135.0, convertAmount(100.0, 1.35)!!, 1e-12)
         assertNull(convertAmount(100.0, null))
     }
@@ -403,5 +408,39 @@ class OdometerTest {
     @Test(expected = IllegalArgumentException::class)
     fun negativeOdometerRejected() {
         Refill(LocalDate.parse("2026-01-01"), 10.0, odometer = -5.0)
+    }
+}
+
+class OcrParserTest {
+    @Test
+    fun extractNumbersFindsDecimals() {
+        assertEquals(listOf(42.5, 85.2), extractNumbers("Total 85.20 EUR\n42.50 L"))
+    }
+
+    @Test
+    fun extractVolumeAndCost() {
+        val (volume, cost) = extractVolumeAndCost("42.50 L\nTOTAL 85.20", "EUR")
+        assertEquals(42.5, volume!!, 1e-9)
+        assertEquals(85.2, cost!!, 1e-9)
+    }
+
+    @Test
+    fun extractOdometer() {
+        assertEquals(123456.0, extractOdometer(" mileage 123456 km")!!, 1e-9)
+    }
+
+    @Test
+    fun classifyPumpPhoto() {
+        assertEquals(OcrTarget.PUMP, classifyPhoto("42.50 L\nTOTAL 85.20 EUR"))
+    }
+
+    @Test
+    fun classifyOdometerPhoto() {
+        assertEquals(OcrTarget.ODOMETER, classifyPhoto("odometer 123456 km"))
+    }
+
+    @Test
+    fun classifyReceiptPhoto() {
+        assertEquals(OcrTarget.RECEIPT, classifyPhoto("RECEIPT\nSHELL STATION\nVAT 20%"))
     }
 }
