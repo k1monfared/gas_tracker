@@ -13,13 +13,14 @@ data class Refill(
     val octane: Int? = null,
     val station: String? = null,
     val odometer: Double? = null,
+    val interpolateCost: Boolean = true,
 ) {
     init {
-        require(volume > 0) { "volume must be positive" }
-        require(distance == null || distance >= 0) { "distance cannot be negative" }
-        require(cost == null || cost >= 0) { "cost cannot be negative" }
+        require(volume.isFinite() && volume > 0) { "volume must be a finite positive number" }
+        require(distance == null || (distance.isFinite() && distance >= 0)) { "distance cannot be negative or non-finite" }
+        require(cost == null || (cost.isFinite() && cost >= 0)) { "cost cannot be negative or non-finite" }
         require(octane == null || octane >= 0) { "octane cannot be negative" }
-        require(odometer == null || odometer >= 0) { "odometer cannot be negative" }
+        require(odometer == null || (odometer.isFinite() && odometer >= 0)) { "odometer cannot be negative or non-finite" }
     }
 
     val volumeL: Double

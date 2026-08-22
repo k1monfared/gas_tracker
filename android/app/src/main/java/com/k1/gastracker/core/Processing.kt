@@ -9,11 +9,24 @@ data class Sample(
     val cost: Double? = null,
     val currency: String = "USD",
     val odometerKm: Double? = null,
+    val interpolateCost: Boolean = true,
 )
 
 data class Dataset(val samples: List<Sample>) {
     val currency: String?
         get() = samples.firstOrNull()?.currency
+}
+
+fun pairedDistanceVolume(samples: List<Sample>): Pair<Double, Double>? {
+    val paired = samples.filter { it.distanceKm != null && it.distanceKm > 0 }
+    if (paired.isEmpty()) return null
+    return paired.sumOf { it.distanceKm!! } to paired.sumOf { it.volumeL }
+}
+
+fun pairedCostDistance(samples: List<Sample>): Pair<Double, Double>? {
+    val paired = samples.filter { it.cost != null && it.distanceKm != null && it.distanceKm > 0 }
+    if (paired.isEmpty()) return null
+    return paired.sumOf { it.cost!! } to paired.sumOf { it.distanceKm!! }
 }
 
 private fun canonical(refill: Refill): Sample = Sample(
@@ -23,6 +36,7 @@ private fun canonical(refill: Refill): Sample = Sample(
     cost = refill.cost,
     currency = refill.currency,
     odometerKm = refill.odometerKm,
+    interpolateCost = refill.interpolateCost,
 )
 
 private fun distancesFromOdometer(samples: List<Sample>): List<Sample> {
@@ -62,6 +76,7 @@ fun mergeSameDay(samples: List<Sample>): List<Sample> = samples
             cost = coalesce { it.cost },
             currency = currencies.first(),
             odometerKm = mergedOdometer,
+            interpolateCost = group.all { it.interpolateCost },
         )
     }
 
@@ -105,7 +120,7 @@ private fun interpolateCosts(samples: List<Sample>): List<Sample> {
     val ppls = samples.map { s -> s.cost?.div(s.volumeL) }
     val known = ppls.withIndex().filter { it.value != null }.map { it.index }
     return samples.mapIndexed { i, s ->
-        if (s.cost != null) {
+        if (s.cost != null || !s.interpolateCost) {
             s
         } else {
             val left = known.lastOrNull { it < i }
@@ -177,4 +192,27 @@ fun buildDataset(refills: List<Refill>): Dataset {
     val merged = mergeSameDay(ordered)
     val computed = distancesFromOdometer(merged)
     return Dataset(interpolateCosts(interpolateDistances(computed)))
+}
+
+fun applyConvertedCost(refill: Refill, converted: ConvertedCost?, targetCurrency: String): Refill {
+    if (refill.currency == targetCurrency) {
+        return refill.copy(currency = targetCurrency)
+    }
+    return when (converted) {
+        is ConvertedCost.Ready -> refill.copy(
+            cost = converted.amount,
+            currency = targetCurrency,
+            interpolateCost = true,
+        )
+        ConvertedCost.Missing -> refill.copy(
+            cost = null,
+            currency = targetCurrency,
+            interpolateCost = true,
+        )
+        ConvertedCost.Unavailable, null -> refill.copy(
+            cost = null,
+            currency = targetCurrency,
+            interpolateCost = false,
+        )
+    }
 }

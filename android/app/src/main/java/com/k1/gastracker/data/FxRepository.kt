@@ -1,6 +1,7 @@
 package com.k1.gastracker.data
 
-import android.content.Context
+import com.k1.gastracker.core.ConvertedCost
+import com.k1.gastracker.core.FxConversion
 import com.k1.gastracker.core.Refill
 import com.k1.gastracker.core.nearestRateAt
 import kotlinx.coroutines.Dispatchers
@@ -14,19 +15,43 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.time.LocalDate
 
-@Serializable
-private data class FxCache(val rates: Map<String, Double> = emptyMap())
+fun interface RateFetcher {
+    fun fetch(date: LocalDate, from: String, to: String): Result<Double>
+}
 
-class FxRepository(context: Context) {
-    private val cacheFile = File(context.filesDir, "fx_cache.json")
+class HttpRateFetcher : RateFetcher {
+    override fun fetch(date: LocalDate, from: String, to: String): Result<Double> = runCatching {
+        val url = URL("https://api.frankfurter.dev/v1/$date?from=$from&to=$to")
+        val conn = url.openConnection() as HttpURLConnection
+        conn.connectTimeout = 10000
+        conn.readTimeout = 10000
+        conn.requestMethod = "GET"
+        conn.setRequestProperty("Accept", "application/json")
+        try {
+            if (conn.responseCode != 200) {
+                error("FX HTTP ${conn.responseCode}")
+            }
+            val text = conn.inputStream.bufferedReader().use { it.readText() }
+            JSONObject(text).getJSONObject("rates").getDouble(to)
+        } finally {
+            conn.disconnect()
+        }
+    }
+}
+
+class FxRepository(
+    private val cacheFile: File,
+    private val fetcher: RateFetcher = HttpRateFetcher(),
+) {
     private val json = Json { ignoreUnknownKeys = true }
 
     suspend fun convertedCosts(
         refills: List<Refill>,
         homeCurrency: String,
-    ): Map<Refill, Double?> = withContext(Dispatchers.IO) {
-        if (refills.isEmpty()) return@withContext emptyMap<Refill, Double?>()
+    ): FxConversion = withContext(Dispatchers.IO) {
+        if (refills.isEmpty()) return@withContext FxConversion(emptyMap())
         val cache = loadCache().rates.toMutableMap()
+        var error: String? = null
 
         val needed = refills
             .filter { it.cost != null && it.currency != homeCurrency }
@@ -36,28 +61,37 @@ class FxRepository(context: Context) {
         for ((date, fromCurrency) in needed) {
             val key = rateKey(date, fromCurrency, homeCurrency)
             if (!cache.containsKey(key)) {
-                fetchRate(date, fromCurrency, homeCurrency)?.let { cache[key] = it }
+                val fetched = fetcher.fetch(date, fromCurrency, homeCurrency)
+                fetched.onSuccess { cache[key] = it }
+                fetched.onFailure { e ->
+                    if (error == null) error = e.message ?: "Could not fetch exchange rates"
+                }
             }
         }
         saveCache(FxCache(cache))
 
-        val result = HashMap<Refill, Double?>()
+        val table = buildRateTable(cache)
+        val result = LinkedHashMap<Refill, ConvertedCost>()
         for (refill in refills) {
             result[refill] = when {
-                refill.cost == null -> null
-                refill.currency == homeCurrency -> refill.cost
+                refill.cost == null -> ConvertedCost.Missing
+                refill.currency == homeCurrency -> ConvertedCost.Ready(refill.cost)
                 else -> {
                     val rate = nearestRateAt(
-                        rates = buildRateTable(cache),
+                        rates = table,
                         day = refill.date,
                         fromCurrency = refill.currency,
                         toCurrency = homeCurrency,
                     )
-                    rate?.times(refill.cost)
+                    if (rate == null) ConvertedCost.Unavailable else ConvertedCost.Ready(rate * refill.cost)
                 }
             }
         }
-        result
+        val unavailable = result.values.count { it is ConvertedCost.Unavailable }
+        if (unavailable > 0 && error == null) {
+            error = "Missing exchange rates for $unavailable refill(s)"
+        }
+        FxConversion(result, error, unavailable)
     }
 
     private fun rateKey(date: LocalDate, from: String, to: String): String =
@@ -80,24 +114,16 @@ class FxRepository(context: Context) {
         }.getOrDefault(FxCache()) else FxCache()
 
     private fun saveCache(cache: FxCache) {
-        val tmp = File(cacheFile.parentFile, cacheFile.name + ".tmp")
+        val parent = cacheFile.parentFile ?: return
+        parent.mkdirs()
+        val tmp = File(parent, cacheFile.name + ".tmp")
         tmp.writeText(json.encodeToString(cache))
         if (!tmp.renameTo(cacheFile)) {
             cacheFile.writeText(tmp.readText())
             tmp.delete()
         }
     }
-
-    private fun fetchRate(date: LocalDate, from: String, to: String): Double? = runCatching {
-        val url = URL("https://api.frankfurter.dev/v1/$date?from=$from&to=$to")
-        val conn = url.openConnection() as HttpURLConnection
-        conn.connectTimeout = 10000
-        conn.readTimeout = 10000
-        conn.requestMethod = "GET"
-        conn.setRequestProperty("Accept", "application/json")
-        if (conn.responseCode != 200) return@runCatching null
-        val text = conn.inputStream.bufferedReader().use { it.readText() }
-        val obj = JSONObject(text)
-        obj.getJSONObject("rates").getDouble(to)
-    }.getOrNull()
 }
+
+@Serializable
+private data class FxCache(val rates: Map<String, Double> = emptyMap())

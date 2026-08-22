@@ -519,3 +519,57 @@ class OdometerInferenceTest {
         assertEquals(10.0, pastAverageEfficiency(refills)!!, 1e-9)
     }
 }
+
+class TrustworthyMetricsTest {
+    @Test
+    fun partialDistanceUsesPairedVolume() {
+        val data = buildDataset(
+            listOf(
+                r("2026-01-01", 40.0, null, 80.0),
+                r("2026-02-01", 40.0, 500.0, 80.0),
+            )
+        )
+        val s = summarize(data)
+        assertEquals(80.0, s.totalVolumeL, 1e-9)
+        assertEquals(500.0, s.totalDistanceKm!!, 1e-9)
+        assertEquals(8.0, s.lPer100Km!!, 1e-9)
+        assertEquals(0.16, s.costPerKm!!, 1e-9)
+    }
+
+    @Test
+    fun fxUnavailableCostIsNotInterpolated() {
+        val data = buildDataset(
+            listOf(
+                Refill(d("2026-01-01"), 10.0, 100.0, 100.0),
+                Refill(d("2026-01-10"), 10.0, 100.0, interpolateCost = false),
+                Refill(d("2026-01-20"), 10.0, 100.0, 130.0),
+            )
+        )
+        assertNull(data.samples[1].cost)
+        assertEquals(100.0, data.samples[0].cost!!, 1e-9)
+        assertEquals(130.0, data.samples[2].cost!!, 1e-9)
+    }
+
+    @Test
+    fun singleRefillDoesNotExtrapolate() {
+        val today = LocalDate.parse("2026-08-21")
+        val result = recentWindow(listOf(Sample(today, 40.0, 500.0, 80.0)), today)
+        assertEquals(1, result.nRefills)
+        assertEquals(false, result.canExtrapolate)
+        assertNull(result.costPerDay)
+        val view = yearlyView(listOf(Sample(today, 40.0, 500.0, 80.0)), today)
+        assertEquals(80.0, view.actualCost!!, 1e-9)
+        assertNull(view.extrapolatedCost)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun nanVolumeRejected() {
+        Refill(date = d("2026-01-01"), volume = Double.NaN)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun infiniteDistanceRejected() {
+        Refill(date = d("2026-01-01"), volume = 10.0, distance = Double.POSITIVE_INFINITY)
+    }
+}
+

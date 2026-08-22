@@ -4,6 +4,18 @@ import java.time.LocalDate
 
 typealias RatesTable = Map<Triple<LocalDate, String, String>, Double>
 
+sealed class ConvertedCost {
+    data class Ready(val amount: Double) : ConvertedCost()
+    data object Missing : ConvertedCost()
+    data object Unavailable : ConvertedCost()
+}
+
+data class FxConversion(
+    val costs: Map<Refill, ConvertedCost>,
+    val error: String? = null,
+    val unavailableCount: Int = 0,
+)
+
 fun nearestRateAt(
     rates: RatesTable,
     day: LocalDate,

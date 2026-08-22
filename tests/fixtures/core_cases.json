@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "partial_distance_first_odometer",
+      "refills": [
+        {"date": "2026-01-01", "volume": 40.0, "odometer": 1000.0, "cost": 80.0},
+        {"date": "2026-02-01", "volume": 40.0, "odometer": 1500.0, "cost": 80.0}
+      ],
+      "summary": {
+        "n_refills": 2,
+        "total_volume_l": 80.0,
+        "total_distance_km": 500.0,
+        "l_per_100_km": 8.0,
+        "total_cost": 160.0
+      }
+    },
+    {
+      "id": "partial_distance_manual",
+      "refills": [
+        {"date": "2026-01-01", "volume": 40.0, "cost": 80.0},
+        {"date": "2026-02-01", "volume": 40.0, "distance": 500.0, "cost": 80.0}
+      ],
+      "summary": {
+        "n_refills": 2,
+        "total_volume_l": 80.0,
+        "total_distance_km": 500.0,
+        "l_per_100_km": 8.0
+      }
+    },
+    {
+      "id": "steady_three_months",
+      "refills": [
+        {"date": "2026-06-15", "volume": 40.0, "distance": 500.0, "cost": 80.0},
+        {"date": "2026-07-15", "volume": 40.0, "distance": 500.0, "cost": 80.0},
+        {"date": "2026-08-15", "volume": 40.0, "distance": 500.0, "cost": 80.0}
+      ],
+      "summary": {
+        "n_refills": 3,
+        "n_days": 61,
+        "total_volume_l": 120.0,
+        "total_distance_km": 1500.0,
+        "l_per_100_km": 8.0
+      }
+    }
+  ]
+}

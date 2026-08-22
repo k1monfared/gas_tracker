@@ -2,7 +2,6 @@ package com.k1.gastracker.data
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.net.Uri
 import com.k1.gastracker.core.OcrTarget
 import com.k1.gastracker.core.PhotoDraft
@@ -16,30 +15,28 @@ class PhotoCache(private val context: Context) {
     private val json = Json { ignoreUnknownKeys = true }
     private val cacheFile = File(context.filesDir, "photo_cache.json")
     private val photosDir = File(context.filesDir, "photos").also { it.mkdirs() }
+    private val lock = Any()
 
-    fun load(): List<PhotoDraft> {
-        if (!cacheFile.exists()) return emptyList()
-        return runCatching {
-            json.decodeFromString<List<PhotoDraftDto>>(cacheFile.readText())
-                .map { it.toDomain() }
-                .filter { File(it.imagePath).exists() }
-        }.getOrDefault(emptyList())
+    fun load(): List<PhotoDraft> = synchronized(lock) { loadUnlocked() }
+
+    fun save(drafts: List<PhotoDraft>) = synchronized(lock) { saveUnlocked(drafts) }
+
+    fun append(draft: PhotoDraft): List<PhotoDraft> = synchronized(lock) {
+        val drafts = loadUnlocked() + draft
+        saveUnlocked(drafts)
+        drafts
     }
 
-    fun save(drafts: List<PhotoDraft>) {
-        val tmp = File(context.filesDir, "photo_cache.json.tmp")
-        tmp.writeText(json.encodeToString(drafts.map { it.toDto() }))
-        tmp.renameTo(cacheFile)
-    }
-
-    fun clear() {
+    fun clear() = synchronized(lock) {
         cacheFile.delete()
         photosDir.listFiles()?.forEach { it.delete() }
     }
 
-    fun delete(draft: PhotoDraft) {
+    fun delete(draft: PhotoDraft): List<PhotoDraft> = synchronized(lock) {
         File(draft.imagePath).delete()
-        save(load().filter { it.imagePath != draft.imagePath })
+        val drafts = loadUnlocked().filter { it.imagePath != draft.imagePath }
+        saveUnlocked(drafts)
+        drafts
     }
 
     fun saveImage(sourceUri: Uri): String {
@@ -55,9 +52,27 @@ class PhotoCache(private val context: Context) {
     fun saveImage(bitmap: Bitmap): String {
         val file = File(photosDir, "photo_${UUID.randomUUID()}.jpg")
         file.outputStream().use {
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it)
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 85, it)
         }
         return file.absolutePath
+    }
+
+    private fun loadUnlocked(): List<PhotoDraft> {
+        if (!cacheFile.exists()) return emptyList()
+        return runCatching {
+            json.decodeFromString<List<PhotoDraftDto>>(cacheFile.readText())
+                .map { it.toDomain() }
+                .filter { File(it.imagePath).exists() }
+        }.getOrDefault(emptyList())
+    }
+
+    private fun saveUnlocked(drafts: List<PhotoDraft>) {
+        val tmp = File(context.filesDir, "photo_cache.json.tmp")
+        tmp.writeText(json.encodeToString(drafts.map { it.toDto() }))
+        if (!tmp.renameTo(cacheFile)) {
+            cacheFile.writeText(tmp.readText())
+            tmp.delete()
+        }
     }
 
     @Serializable

@@ -6,7 +6,7 @@
 
 [Website](http://k1monfared.com/gas_tracker/) | [Download APK](https://github.com/k1monfared/gas_tracker/releases/latest) | [Changelog](CHANGELOG.md)
 
-**Status**: POC | **Version**: 0.2.0 | **License**: GPL-3.0 | **Min Android**: 10.0+
+**Status**: POC | **Version**: 0.3.0 | **License**: GPL-3.0 | **Min Android**: 10.0+
 
 ---
 
@@ -37,8 +37,10 @@ All data stays on your device. There are no ads, no accounts, and no cloud depen
 ### Dashboard and history
 
 - Dashboard with recent metrics: cost per period, efficiency (L/100 km and MPG), average price per liter, and more.
-- History list with edit and delete.
-- Foreign costs are converted to your home currency using ECB reference rates cached locally.
+- Consumption ratios only include fuel that has a known distance. Sparse history does not invent a monthly or yearly run rate.
+- History list with edit and delete, plus JSON export and import in Settings.
+- Foreign costs are converted to your home currency using ECB reference rates cached locally. Missing rates stay blank instead of being estimated.
+- Refill history is versioned JSON with a backup copy. A damaged file is never treated as an empty log.
 
 ---
 
@@ -54,7 +56,7 @@ For automatic updates, point [Obtainium](https://github.com/ImranR98/Obtainium) 
 
 ## Notes
 
-- The APK is about 66 MB because it bundles the Tesseract OCR English model.
+- The debug APK is about 24 MB. The English Tesseract model is gzip-compressed in the APK and unpacked on first OCR use. OCR accuracy is unchanged.
 - OCR classification is rule-based. If a photo is misclassified, remove the draft and take a clearer photo.
 - Camera capture works on real devices. The emulator camera app on the test AVD crashes, so the camera path has only been verified via intent setup there.
 
@@ -69,14 +71,16 @@ The project has two mirrored cores:
 - `gas_tracker/`: Python reference implementation and tests.
 - `android/app/src/main/java/com/k1/gastracker/core/`: Kotlin port used by the Android app.
 
-Both cores implement the same processing pipeline: canonicalize units, merge same-day refills, interpolate missing distances, compute windowed metrics, and convert costs via cached FX rates.
+Both cores implement the same processing pipeline: canonicalize units, merge same-day refills, interpolate missing distances, compute windowed metrics, and convert costs via cached FX rates. Shared numeric cases live in `tests/fixtures/core_cases.json`.
 
 The Android UI is built with Jetpack Compose. State is held in `AppViewModel` and persisted with:
 
-- `files/refills.json` for refills
+- `files/refills.json` for refills (schema version 1, plus `.bak`)
 - `files/fx_cache.json` for exchange rates
 - `files/photo_cache.json` and `files/photos/` for OCR drafts
 - `SharedPreferences` for settings
+
+Architecture, data format, privacy, and release notes live in `docs/`.
 
 ### Project structure
 
@@ -89,7 +93,7 @@ gas_tracker/
 │   │   ├── data/                 # Persistence, FX, OCR, photo cache
 │   │   └── ui/                   # Jetpack Compose screens
 │   └── app/build.gradle.kts
-├── docs/                         # GitHub Pages site
+├── docs/                         # GitHub Pages site plus architecture notes
 ├── README.md
 ├── readme.log                    # Original spec and roadmap
 └── CHANGELOG.md
@@ -100,16 +104,17 @@ gas_tracker/
 Python (from repo root):
 
 ```bash
+python3 -m pip install -e ".[test]"
 python3 -m pytest -q
 ```
 
-Android (from `android/`):
+Android (from `android/`, JDK 21):
 
 ```bash
-./gradlew -Dorg.gradle.java.home=/tmp/opencode/jdk-21.0.12.1+1 :app:testDebugUnitTest :app:assembleDebug
+./gradlew :app:testDebugUnitTest :app:assembleDebug
 ```
 
-The system Java is a JRE without `javac`, so pass a full JDK with `-Dorg.gradle.java.home=...` or install `openjdk-21-jdk-headless` and drop the flag.
+Use JDK 17 or 21 to run Gradle, not Android Studio's bundled JBR 25. CI pins Temurin 21.
 
 Debug APK output:
 

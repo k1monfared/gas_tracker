@@ -54,6 +54,13 @@ private fun spanDays(samples: List<Sample>): Int {
     return maxOf(days, 1L).toInt()
 }
 
+private fun efficiency(distance: Double, volume: Double): Triple<Double, Double, Double> {
+    val kmPerL = distance / volume
+    val lPer100 = volume / distance * 100
+    val mpg = kmToMiles(distance) / litersToGallons(volume)
+    return Triple(kmPerL, lPer100, mpg)
+}
+
 fun summarize(data: Dataset): Summary {
     val samples = data.samples
     val totalVolume = samples.sumOf { it.volumeL }
@@ -63,11 +70,20 @@ fun summarize(data: Dataset): Summary {
     val totalCost = if (costs.isEmpty()) null else costs.sum()
     val nDays = spanDays(samples)
 
-    val kmPerL = totalDistance?.div(totalVolume)
-    val lPer100 = totalDistance?.let { totalVolume / it * 100 }
-    val mpg = totalDistance?.let { kmToMiles(it) / litersToGallons(totalVolume) }
-    val costPerKm = if (totalCost != null && totalDistance != null) totalCost / totalDistance else null
-    val avgPrice = totalCost?.div(totalVolume)
+    val paired = pairedDistanceVolume(samples)
+    val (kmPerL, lPer100, mpg) = if (paired != null) {
+        efficiency(paired.first, paired.second)
+    } else {
+        Triple(null, null, null)
+    }
+    val costPair = pairedCostDistance(samples)
+    val costPerKm = if (costPair != null) costPair.first / costPair.second else null
+    val priced = samples.filter { it.cost != null }
+    val avgPrice = if (priced.isEmpty()) {
+        null
+    } else {
+        priced.sumOf { it.cost!! } / priced.sumOf { it.volumeL }
+    }
 
     val gaps = samples.zipWithNext().mapNotNull { (a, b) ->
         if (b.date > a.date) ChronoUnit.DAYS.between(a.date, b.date) else null
@@ -138,15 +154,17 @@ fun periodSeries(data: Dataset, kind: PeriodKind): List<PeriodPoint> {
         val costs = group.mapNotNull { it.cost }
         val cost = if (costs.isEmpty()) null else costs.sum()
         val volume = group.sumOf { it.volumeL }
-        val positive = anyDistance && distance > 0
+        val paired = pairedDistanceVolume(group)
+        val lPer100 = paired?.let { it.second / it.first * 100 }
+        val mpg = paired?.let { kmToMiles(it.first) / litersToGallons(it.second) }
         PeriodPoint(
             key = key,
             start = starts.getValue(key),
             distanceKm = if (anyDistance) distance else null,
             volumeL = volume,
             cost = cost,
-            lPer100Km = if (positive) volume / distance * 100 else null,
-            mpg = if (positive) kmToMiles(distance) / litersToGallons(volume) else null,
+            lPer100Km = lPer100,
+            mpg = mpg,
         )
     }
 }

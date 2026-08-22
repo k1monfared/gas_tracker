@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <include domain="file" path="refills.json" />
+    <include domain="file" path="refills.json.bak" />
+    <include domain="file" path="fx_cache.json" />
+    <include domain="sharedpref" path="." />
+</full-backup-content>

@@ -167,3 +167,32 @@ def test_invalid_refill_rejected():
         r("2026-01-01", 10, distance=-5)
     with pytest.raises(ValueError):
         r("2026-01-01", 10, cost=-1)
+
+
+def test_non_finite_values_rejected():
+    with pytest.raises(ValueError):
+        r("2026-01-01", float("nan"))
+    with pytest.raises(ValueError):
+        r("2026-01-01", 10, distance=float("inf"))
+    with pytest.raises(ValueError):
+        r("2026-01-01", 10, cost=float("-inf"))
+
+
+def test_fx_unavailable_cost_is_not_interpolated():
+    data = build_dataset(
+        [
+            Refill(date=dt.date(2026, 1, 1), volume=10, distance=100, cost=100),
+            Refill(
+                date=dt.date(2026, 1, 10),
+                volume=10,
+                distance=100,
+                cost=None,
+                interpolate_cost=False,
+            ),
+            Refill(date=dt.date(2026, 1, 20), volume=10, distance=100, cost=130),
+        ]
+    )
+    assert data.samples[1].cost is None
+    assert data.samples[0].cost == pytest.approx(100)
+    assert data.samples[2].cost == pytest.approx(130)
+

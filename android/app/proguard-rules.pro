@@ -1,0 +1,6 @@
+-keep class com.k1.gastracker.data.** { *; }
+-dontobfuscate
+-keep class com.googlecode.tesseract.android.** { *; }
+-keep class com.googlecode.leptonica.android.** { *; }
+-keepattributes RuntimeVisibleAnnotations, AnnotationDefault
+-dontwarn kotlinx.serialization.**
