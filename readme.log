@@ -33,6 +33,28 @@ Milestones
    - Privacy and backup rules, accessibility strings, and CI.
    - APK size: gzipped OCR model, compressed JNI, drop 32-bit x86, release R8.
 
+Decisions (2026-08-24, PR 1 review)
+
+- Partial data is the core issue behind the v0.3.0 metric changes. Average price per
+  liter now divides by the volume of priced refills only, and cost per km pairs cost
+  with known distance. These changes are good but they treat symptoms: the underlying
+  problem is that cost or distance can be missing at all. Intentional decision: ratios
+  only combine values that are actually known, and missing data stays missing rather
+  than being estimated. Revisit once entry flows (better extraction, prefill) make
+  missing fields rare.
+- Empty-window reporting: the Python and Kotlin cores now both report the expanded
+  window (90 days) when the fallback window is also empty. Open question, analyze
+  later: which value is more meaningful to report for an empty window.
+- Accepted as known issues, tracked in the README to do: failed-import reporting shows
+  a stale success banner when history was previously loaded, and the FX refresh path
+  runs without an exception guard.
+- Stored photo drafts are capped at 1600 px JPEG quality 85 and are the only surviving
+  copy of the photo; accepted for now, fidelity tradeoff to be analyzed.
+- No per-call cap on FX rate fetches, decided against for now.
+- OCR (Tesseract) is not doing its work: accuracy on real pump, odometer, and receipt
+  photos is inadequate. Critical issue. Plan: test LLM-based extraction as a
+  replacement before investing further in OCR heuristics.
+
 Notes
 
 - Camera capture is implemented via a FileProvider; it works on real devices. The emulator camera app on the test AVD crashes, so camera was verified via intent setup and gallery flow only on the emulator.

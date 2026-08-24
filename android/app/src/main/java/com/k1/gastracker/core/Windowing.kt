@@ -66,16 +66,18 @@ fun recentWindow(
     }
 
     var chosen = window(primaryDays)
+    var usedDays = primaryDays
     if (chosen.size < minRefills) {
         val expanded = window(expandedDays)
         if (expanded.size >= minRefills || chosen.isEmpty()) {
             chosen = expanded
+            usedDays = expandedDays
         }
     }
 
     if (chosen.isEmpty()) {
         return WindowResult(
-            windowDays = primaryDays, nRefills = 0, start = null,
+            windowDays = usedDays, nRefills = 0, start = null,
             totalDistanceKm = null, totalVolumeL = 0.0, totalCost = null,
             distancePerDay = null, costPerDay = null,
             coverageDays = 0, canExtrapolate = false,

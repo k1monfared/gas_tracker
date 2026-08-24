@@ -562,6 +562,14 @@ class TrustworthyMetricsTest {
         assertNull(view.extrapolatedCost)
     }
 
+    @Test
+    fun emptyAfterFallbackWindowReportsExpandedDays() {
+        val today = LocalDate.parse("2026-08-21")
+        val result = recentWindow(listOf(Sample(LocalDate.parse("2026-01-01"), 40.0, 500.0, 80.0)), today)
+        assertEquals(0, result.nRefills)
+        assertEquals(90, result.windowDays)
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun nanVolumeRejected() {
         Refill(date = d("2026-01-01"), volume = Double.NaN)

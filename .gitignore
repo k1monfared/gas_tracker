@@ -10,3 +10,4 @@ android/gradle/config.properties
 *.iml
 .idea/
 .DS_Store
+.pr-reviews/

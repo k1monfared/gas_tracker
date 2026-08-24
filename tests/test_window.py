@@ -113,6 +113,13 @@ def test_single_refill_does_not_extrapolate():
     assert view.extrapolated_cost is None
 
 
+def test_empty_after_fallback_window_reports_expanded_days():
+    today = dt.date(2026, 8, 21)
+    result = recent_window([s("2026-01-01", 40, 500, 80)], today)
+    assert result.n_refills == 0
+    assert result.window_days == 90
+
+
 def test_window_ratios_partial_distance():
     ratios = window_ratios(
         [

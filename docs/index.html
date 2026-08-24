@@ -116,7 +116,7 @@
 <div class="container">
     <div class="hero">
         <img src="logo-512.png" alt="Gas Tracker logo" class="logo">
-        <div class="badge">v0.2.0 &middot; GPL v3 &middot; Android 10+</div>
+        <div class="badge">v0.3.0 &middot; GPL v3 &middot; Android 10+</div>
         <h1>Gas<span>Tracker</span></h1>
         <p>Fuel usage and cost tracking for one car. Manual, odometer, or photo entry with on-device OCR.</p>
         <a href="https://github.com/k1monfared/gas_tracker/releases/latest" class="btn btn-primary">Download APK</a>
@@ -158,11 +158,15 @@
             </div>
             <div class="feature">
                 <h3>Dashboard</h3>
-                <p>Track cost per period, efficiency in L/100km and MPG, and average price per liter.</p>
+                <p>Cost per period, efficiency in L/100km and MPG, and average price per liter. Ratios use only known values, so sparse history never invents a run rate.</p>
+            </div>
+            <div class="feature">
+                <h3>Reliable history</h3>
+                <p>Versioned refill storage with a backup copy, JSON export and import, and fail-closed loads. A damaged file is never treated as an empty log.</p>
             </div>
             <div class="feature">
                 <h3>Private and offline</h3>
-                <p>Data stays on your device. Optional FX conversion uses cached ECB rates.</p>
+                <p>All data stays on your device and the app works fully offline. Exchange rates are fetched only if you log foreign-currency refills, and cloud backup of your history follows your device's backup setting. Receipt photos are never backed up.</p>
             </div>
         </div>
     </section>

@@ -14,7 +14,10 @@
 
 Gas Tracker is a simple, private Android app for tracking how much fuel your car uses and how much it costs. It assumes you fill the tank at every refill, so efficiency and cost-per-distance calculations are straightforward.
 
-All data stays on your device. There are no ads, no accounts, and no cloud dependency except for optional currency conversion rates.
+All data stays on your device and the app works fully offline. There are no ads and no accounts. Two optional cloud touches, both avoidable:
+
+- Currency conversion rates are fetched from frankfurter.dev only when you log a refill in a currency other than your home currency, and cached locally.
+- Android's automatic cloud backup can include your refill history, settings, and cached rates. This follows your device's backup setting, so you can turn it off entirely in Android's backup settings. Receipt photos are never backed up.
 
 ---
 
@@ -32,12 +35,12 @@ All data stays on your device. There are no ads, no accounts, and no cloud depen
 - Tesseract OCR runs on your device and extracts the numbers.
 - The app auto-classifies the photo as pump, odometer, or receipt.
 - Extracted values appear as drafts at the top of the form and are prefilled for you to review before saving.
-- Drafts are cached locally, so they survive app restarts.
+- Drafts are cached locally, so they survive app restarts. Draft photos are stored downscaled to at most 1600 px to bound storage use.
 
 ### Dashboard and history
 
 - Dashboard with recent metrics: cost per period, efficiency (L/100 km and MPG), average price per liter, and more.
-- Consumption ratios only include fuel that has a known distance. Sparse history does not invent a monthly or yearly run rate.
+- Ratios only combine values that are actually known: efficiency uses fuel paired with a known distance, average price per liter is computed over priced refills only, and cost per km uses refills that have both cost and distance. Sparse history does not invent a monthly or yearly run rate.
 - History list with edit and delete, plus JSON export and import in Settings.
 - Foreign costs are converted to your home currency using ECB reference rates cached locally. Missing rates stay blank instead of being estimated.
 - Refill history is versioned JSON with a backup copy. A damaged file is never treated as an empty log.
@@ -56,9 +59,33 @@ For automatic updates, point [Obtainium](https://github.com/ImranR98/Obtainium) 
 
 ## Notes
 
-- The debug APK is about 24 MB. The English Tesseract model is gzip-compressed in the APK and unpacked on first OCR use. OCR accuracy is unchanged.
+- The debug APK is about 24 MB. The English Tesseract model is gzip-compressed in the APK and unpacked on first OCR use.
 - OCR classification is rule-based. If a photo is misclassified, remove the draft and take a clearer photo.
 - Camera capture works on real devices. The emulator camera app on the test AVD crashes, so the camera path has only been verified via intent setup there.
+
+---
+
+## Known issues and to do
+
+Decided 2026-08-24 after the v0.3.0 review. Decision rationale lives in `readme.log`.
+
+Critical, accepted for now:
+
+- A failed import is reported as success: importing a corrupt file with previously loaded history shows "Imported N refill(s)" with the old count, and shows nothing at all on first launch. Data is never written on a failed import. Explicitly accepted.
+- The FX refresh path runs without an exception guard. A disk error, or a rename race during rapid currency switching, can crash the app and leave the loading indicator stuck. Explicitly accepted.
+- OCR is not doing its work. Tesseract accuracy on real pump, odometer, and receipt photos is inadequate, so photo entry is unreliable in practice. An LLM-based replacement will be tested before further investment in OCR heuristics.
+- Stored photo drafts are the only surviving copy of the photo and are capped at 1600 px JPEG quality 85. Analyze the fidelity tradeoff.
+- The empty-window case reports 90 days (the expanded window consulted) on both cores. Analyze which value is most meaningful to report there.
+
+Smaller items:
+
+- Dead code: `pendingVolume` in the log form, unused window-caption string resources, unreachable `Missing` branches in `RefillStore`.
+- Window captions ("last N days") are hardcoded English even though equivalent string resources exist.
+- `TessdataInstaller` first-run race: two overlapping first OCR runs share a temp path and can publish a truncated model.
+- Test gaps: failed import with previously good history, direct coverage of the priced-only average price, `canExtrapolate` boundary values (exactly 2 refills, exactly 7 days, the 28-day yearly threshold).
+- Export, import, and history load run on the main thread. Files are small, so this is a convention note.
+
+Decided against for now: a per-call cap on FX rate fetches.
 
 ---
 
@@ -95,7 +122,7 @@ gas_tracker/
 │   └── app/build.gradle.kts
 ├── docs/                         # GitHub Pages site plus architecture notes
 ├── README.md
-├── readme.log                    # Original spec and roadmap
+├── readme.log                    # Spec, roadmap, and decision log
 └── CHANGELOG.md
 ```
 
