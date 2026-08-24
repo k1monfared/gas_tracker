@@ -3,11 +3,15 @@ from __future__ import annotations
 import datetime as dt
 from dataclasses import dataclass
 
-from .processing import Sample
+from .processing import Sample, paired_cost_distance, paired_distance_volume
+from .units import km_to_miles, liters_to_gallons
 
 DAYS_PER_WEEK = 7.0
 DAYS_PER_MONTH = 28.0
 DAYS_PER_YEAR = 365.25
+MIN_RATE_REFILLS = 2
+MIN_RATE_COVERAGE_DAYS = 7
+MIN_YEARLY_EXTRAPOLATION_DAYS = 28
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,6 +24,8 @@ class WindowResult:
     total_cost: float | None
     distance_per_day: float | None
     cost_per_day: float | None
+    coverage_days: int = 0
+    can_extrapolate: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,6 +64,7 @@ def recent_window(
             window_days=primary_days, n_refills=0, start=None,
             total_distance_km=None, total_volume_l=0.0, total_cost=None,
             distance_per_day=None, cost_per_day=None,
+            coverage_days=0, can_extrapolate=False,
         )
 
     def window(days: int) -> list[Sample]:
@@ -65,26 +72,43 @@ def recent_window(
         return [s for s in ordered if s.date >= cutoff and s.date <= today]
 
     chosen = window(primary_days)
+    used_days = primary_days
     if len(chosen) < min_refills:
         expanded = window(expanded_days)
         if len(expanded) >= min_refills or not chosen:
             chosen = expanded
+            used_days = expanded_days
 
-    window_days = _span_days(min(s.date for s in chosen), today)
+    if not chosen:
+        return WindowResult(
+            window_days=used_days, n_refills=0, start=None,
+            total_distance_km=None, total_volume_l=0.0, total_cost=None,
+            distance_per_day=None, cost_per_day=None,
+            coverage_days=0, can_extrapolate=False,
+        )
+
+    coverage_days = _span_days(min(s.date for s in chosen), today)
+    can_extrapolate = len(chosen) >= MIN_RATE_REFILLS and coverage_days >= MIN_RATE_COVERAGE_DAYS
     distances = [s.distance_km for s in chosen if s.distance_km is not None]
     costs = [s.cost for s in chosen if s.cost is not None]
     total_distance = sum(distances) if distances else None
     total_cost = sum(costs) if costs else None
 
     return WindowResult(
-        window_days=window_days,
+        window_days=coverage_days,
         n_refills=len(chosen),
         start=min(s.date for s in chosen),
         total_distance_km=total_distance,
         total_volume_l=sum(s.volume_l for s in chosen),
         total_cost=total_cost,
-        distance_per_day=total_distance / window_days if total_distance is not None else None,
-        cost_per_day=total_cost / window_days if total_cost is not None else None,
+        distance_per_day=(
+            total_distance / coverage_days if total_distance is not None and can_extrapolate else None
+        ),
+        cost_per_day=(
+            total_cost / coverage_days if total_cost is not None and can_extrapolate else None
+        ),
+        coverage_days=coverage_days,
+        can_extrapolate=can_extrapolate,
     )
 
 
@@ -95,30 +119,25 @@ def flow_value(per_day: float | None, period_days: float) -> float | None:
 
 
 def window_ratios(samples: tuple[Sample, ...] | list[Sample]) -> RatioMetrics:
-    distances = [s.distance_km for s in samples if s.distance_km is not None]
-    costs = [s.cost for s in samples if s.cost is not None]
-    total_distance = sum(distances) if distances else None
     total_volume = sum(s.volume_l for s in samples)
-    total_cost = sum(costs) if costs else None
-
     if total_volume == 0:
         return RatioMetrics(None, None, None, None, None)
 
-    from .units import km_to_miles, liters_to_gallons
+    paired = paired_distance_volume(samples)
+    if paired:
+        dist, vol = paired
+        km_per_l = dist / vol
+        l_per_100 = vol / dist * 100
+        mpg = km_to_miles(dist) / liters_to_gallons(vol)
+    else:
+        km_per_l = l_per_100 = mpg = None
 
-    km_per_l = total_distance / total_volume if total_distance else None
-    l_per_100 = total_volume / total_distance * 100 if total_distance else None
-    mpg = (
-        km_to_miles(total_distance) / liters_to_gallons(total_volume)
-        if total_distance
-        else None
+    cost_pair = paired_cost_distance(samples)
+    cost_per_km = cost_pair[0] / cost_pair[1] if cost_pair else None
+    priced = [s for s in samples if s.cost is not None]
+    avg_price = (
+        sum(s.cost for s in priced) / sum(s.volume_l for s in priced) if priced else None
     )
-    cost_per_km = (
-        total_cost / total_distance
-        if total_cost is not None and total_distance
-        else None
-    )
-    avg_price = total_cost / total_volume if total_cost is not None else None
 
     return RatioMetrics(km_per_l, l_per_100, mpg, cost_per_km, avg_price)
 
@@ -144,14 +163,23 @@ def yearly_view(
     total_distance = sum(distances) if distances else None
     total_cost = sum(costs) if costs else None
     coverage_days = _span_days(min(s.date for s in in_year), today)
+    can_extrapolate = (
+        len(in_year) >= MIN_RATE_REFILLS and coverage_days >= MIN_YEARLY_EXTRAPOLATION_DAYS
+    )
 
     return YearlyView(
         period_days=year_days,
         n_refills=len(in_year),
         actual_cost=total_cost,
         actual_distance_km=total_distance,
-        extrapolated_cost=flow_value(total_cost / coverage_days if total_cost is not None else None, year_days),
-        extrapolated_distance_km=flow_value(
-            total_distance / coverage_days if total_distance is not None else None, year_days
+        extrapolated_cost=(
+            flow_value(total_cost / coverage_days if total_cost is not None else None, year_days)
+            if can_extrapolate else None
+        ),
+        extrapolated_distance_km=(
+            flow_value(
+                total_distance / coverage_days if total_distance is not None else None, year_days
+            )
+            if can_extrapolate else None
         ),
     )

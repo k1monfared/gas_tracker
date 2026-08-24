@@ -100,3 +100,18 @@ def test_empty_dataset_summary():
     assert s.total_cost is None
     assert s.mpg is None
     assert average_cost_per_period(build_dataset([]), "month") is None
+
+
+def test_partial_distance_uses_paired_volume_only():
+    data = build_dataset(
+        [
+            Refill(date=dt.date(2026, 1, 1), volume=40, cost=80),
+            Refill(date=dt.date(2026, 2, 1), volume=40, distance=500, cost=80),
+        ]
+    )
+    s = summarize(data)
+    assert s.total_volume_l == pytest.approx(80)
+    assert s.total_distance_km == pytest.approx(500)
+    assert s.l_per_100_km == pytest.approx(8.0)
+    assert s.cost_per_km == pytest.approx(0.16)
+

@@ -4,7 +4,7 @@ import datetime as dt
 from dataclasses import dataclass
 from typing import Literal
 
-from .processing import Dataset, Sample
+from .processing import Dataset, Sample, paired_cost_distance, paired_distance_volume
 from .units import km_to_miles, liters_to_gallons
 
 PeriodKind = Literal["week", "month", "year"]
@@ -61,6 +61,13 @@ def _span_days(samples: tuple[Sample, ...]) -> int:
     return max((samples[-1].date - samples[0].date).days, 1)
 
 
+def _efficiency(distance: float, volume: float) -> tuple[float, float, float]:
+    km_per_l = distance / volume
+    l_per_100 = volume / distance * 100
+    mpg = km_to_miles(distance) / liters_to_gallons(volume)
+    return km_per_l, l_per_100, mpg
+
+
 def summarize(data: Dataset) -> Summary:
     samples = data.samples
     total_volume = sum(s.volume_l for s in samples)
@@ -70,15 +77,18 @@ def summarize(data: Dataset) -> Summary:
     total_cost = sum(costs) if costs else None
     n_days = _span_days(samples)
 
-    km_per_l = total_distance / total_volume if total_distance else None
-    l_per_100_km = total_volume / total_distance * 100 if total_distance else None
-    mpg = (
-        km_to_miles(total_distance) / liters_to_gallons(total_volume)
-        if total_distance
-        else None
+    paired = paired_distance_volume(samples)
+    if paired:
+        km_per_l, l_per_100_km, mpg = _efficiency(paired[0], paired[1])
+    else:
+        km_per_l = l_per_100_km = mpg = None
+
+    cost_pair = paired_cost_distance(samples)
+    cost_per_km = cost_pair[0] / cost_pair[1] if cost_pair else None
+    priced = [s for s in samples if s.cost is not None]
+    avg_price = (
+        sum(s.cost for s in priced) / sum(s.volume_l for s in priced) if priced else None
     )
-    cost_per_km = total_cost / total_distance if total_cost is not None and total_distance else None
-    avg_price = total_cost / total_volume if total_cost is not None else None
 
     gaps = [
         (b.date - a.date).days
@@ -159,12 +169,11 @@ def period_series(data: Dataset, kind: PeriodKind) -> list[PeriodPoint]:
         costs = [s.cost for s in group if s.cost is not None]
         cost = sum(costs) if costs else None
         volume = sum(s.volume_l for s in group)
-        l_per_100 = volume / distance * 100 if any_distance and distance > 0 else None
-        mpg = (
-            km_to_miles(distance) / liters_to_gallons(volume)
-            if any_distance and distance > 0
-            else None
-        )
+        paired = paired_distance_volume(group)
+        if paired:
+            _, l_per_100, mpg = _efficiency(paired[0], paired[1])
+        else:
+            l_per_100 = mpg = None
         points.append(
             PeriodPoint(
                 key=key,

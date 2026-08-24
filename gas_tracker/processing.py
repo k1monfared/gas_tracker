@@ -16,6 +16,7 @@ class Sample:
     cost: float | None = None
     currency: str = "USD"
     odometer_km: float | None = None
+    interpolate_cost: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,6 +30,24 @@ class Dataset:
         return self.samples[0].currency
 
 
+def paired_distance_volume(samples: Sequence[Sample]) -> tuple[float, float] | None:
+    paired = [s for s in samples if s.distance_km is not None and s.distance_km > 0]
+    if not paired:
+        return None
+    return sum(s.distance_km for s in paired), sum(s.volume_l for s in paired)
+
+
+def paired_cost_distance(samples: Sequence[Sample]) -> tuple[float, float] | None:
+    paired = [
+        s
+        for s in samples
+        if s.cost is not None and s.distance_km is not None and s.distance_km > 0
+    ]
+    if not paired:
+        return None
+    return sum(s.cost for s in paired), sum(s.distance_km for s in paired)
+
+
 def _canonical(refill: Refill) -> Sample:
     return Sample(
         date=refill.date,
@@ -37,6 +56,7 @@ def _canonical(refill: Refill) -> Sample:
         cost=refill.cost,
         currency=refill.currency,
         odometer_km=refill.odometer_km,
+        interpolate_cost=refill.interpolate_cost,
     )
 
 
@@ -83,6 +103,7 @@ def merge_same_day(samples: Sequence[Sample]) -> list[Sample]:
                 cost=coalesce("cost"),
                 currency=currencies.pop(),
                 odometer_km=merged_odometer,
+                interpolate_cost=all(s.interpolate_cost for s in group),
             )
         )
     return merged
@@ -122,7 +143,7 @@ def _interpolate_costs(samples: list[Sample]) -> list[Sample]:
     known = [i for i, p in enumerate(ppls) if p is not None]
     out = list(samples)
     for i, s in enumerate(out):
-        if s.cost is not None:
+        if s.cost is not None or not s.interpolate_cost:
             continue
         left = max((k for k in known if k < i), default=None)
         right = min((k for k in known if k > i), default=None)

@@ -2,10 +2,10 @@ package com.k1.gastracker.ui
 
 import android.app.Application
 import android.content.Context
-import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.k1.gastracker.core.ConvertedCost
 import com.k1.gastracker.core.DistanceUnit
 import com.k1.gastracker.core.OcrTarget
 import com.k1.gastracker.core.PhotoDraft
@@ -15,17 +15,22 @@ import com.k1.gastracker.core.classifyPhoto
 import com.k1.gastracker.core.extractOdometer
 import com.k1.gastracker.core.extractVolumeAndCost
 import com.k1.gastracker.core.inferDistanceFromOdometer
+import com.k1.gastracker.data.BitmapSampler
 import com.k1.gastracker.data.FxRepository
 import com.k1.gastracker.data.PhotoCache
+import com.k1.gastracker.data.RefillLoadResult
 import com.k1.gastracker.data.RefillStore
 import com.k1.gastracker.data.TesseractOcr
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.time.LocalDate
 
 data class UiState(
@@ -38,25 +43,37 @@ data class UiState(
     val photoDrafts: List<PhotoDraft> = emptyList(),
     val photoLoading: Boolean = false,
     val photoError: String? = null,
-    val convertedCosts: Map<Refill, Double?> = emptyMap(),
+    val convertedCosts: Map<Refill, ConvertedCost> = emptyMap(),
     val fxLoading: Boolean = false,
     val fxError: String? = null,
+    val fxUnavailableCount: Int = 0,
+    val storageError: String? = null,
+    val historyWritable: Boolean = true,
+    val recoveredFromBackup: Boolean = false,
+    val importMessage: String? = null,
 )
 
-class AppViewModel(application: Application) : AndroidViewModel(application) {
-    private val store = RefillStore(application)
-    private val fxRepo = FxRepository(application)
-    private val photoCache = PhotoCache(application)
+class AppViewModel internal constructor(
+    application: Application,
+    private val store: RefillStore,
+    private val fxRepo: FxRepository,
+    private val photoCache: PhotoCache,
+) : AndroidViewModel(application), GasTrackerActions {
+    constructor(application: Application) : this(
+        application,
+        RefillStore(application.filesDir),
+        FxRepository(File(application.filesDir, "fx_cache.json")),
+        PhotoCache(application),
+    )
+
     private val prefs = application.getSharedPreferences("gastracker", Context.MODE_PRIVATE)
+    private var fxJob: Job? = null
 
     private val _state = MutableStateFlow(
-        UiState(
-            refills = store.load(),
-            homeCurrency = prefs.getString("home_currency", null) ?: "EUR",
-            lastDistanceUnit = prefs.get("distance_unit", DistanceUnit.KM),
-            lastVolumeUnit = prefs.get("volume_unit", VolumeUnit.LITER),
-            lastInputCurrency = prefs.getString("input_currency", null) ?: "EUR",
+        initialState(
+            prefs = prefs,
             photoDrafts = photoCache.load(),
+            load = store.load(),
         )
     )
 
@@ -66,28 +83,28 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         refreshFx()
     }
 
-    fun setHomeCurrency(currency: String) {
+    override fun setHomeCurrency(currency: String) {
         _state.update { it.copy(homeCurrency = currency) }
-        persist()
+        persistPrefs()
         refreshFx()
     }
 
-    fun setDistanceUnit(unit: DistanceUnit) {
+    override fun setDistanceUnit(unit: DistanceUnit) {
         _state.update { it.copy(lastDistanceUnit = unit) }
-        persist()
+        persistPrefs()
     }
 
-    fun setVolumeUnit(unit: VolumeUnit) {
+    override fun setVolumeUnit(unit: VolumeUnit) {
         _state.update { it.copy(lastVolumeUnit = unit) }
-        persist()
+        persistPrefs()
     }
 
-    fun setInputCurrency(currency: String) {
+    override fun setInputCurrency(currency: String) {
         _state.update { it.copy(lastInputCurrency = currency) }
-        persist()
+        persistPrefs()
     }
 
-    fun startEditing(refill: Refill) {
+    override fun startEditing(refill: Refill) {
         clearPhotoDrafts()
         _state.update {
             it.copy(
@@ -99,15 +116,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun cancelEditing() {
+    override fun cancelEditing() {
+        clearPhotoDrafts()
         _state.update { it.copy(editingRefill = null) }
     }
 
-    suspend fun convertedCosts(targetCurrency: String): Map<Refill, Double?> {
-        return fxRepo.convertedCosts(_state.value.refills, targetCurrency)
+    override suspend fun convertedCosts(targetCurrency: String): Map<Refill, ConvertedCost> {
+        return fxRepo.convertedCosts(_state.value.refills, targetCurrency).costs
     }
 
-    fun saveRefill(refill: Refill) {
+    override fun saveRefill(refill: Refill) {
+        if (!_state.value.historyWritable) return
         _state.update { current ->
             val old = current.editingRefill
             val list = if (old != null) {
@@ -118,33 +137,41 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             current.copy(refills = list, editingRefill = null)
         }
         clearPhotoDrafts()
-        persist()
+        persistRefills()
+        persistPrefs()
         refreshFx()
     }
 
-    fun deleteRefill(refill: Refill) {
+    override fun deleteRefill(refill: Refill) {
+        if (!_state.value.historyWritable) return
         _state.update { current ->
             current.copy(
                 refills = current.refills - refill,
                 editingRefill = if (current.editingRefill == refill) null else current.editingRefill,
             )
         }
-        persist()
+        persistRefills()
         refreshFx()
     }
 
-    fun processPhoto(uri: Uri) {
+    override fun processPhoto(uri: Uri) {
         viewModelScope.launch(Dispatchers.IO) {
             _state.update { it.copy(photoLoading = true, photoError = null) }
+            var bitmap: android.graphics.Bitmap? = null
             val result = runCatching {
                 val context = getApplication<Application>()
-                val bitmap = context.contentResolver.openInputStream(uri)?.use { stream ->
-                    BitmapFactory.decodeStream(stream)
+                val image = context.contentResolver.openInputStream(uri)?.use { stream ->
+                    BitmapSampler.decode(stream)
                 } ?: throw IllegalArgumentException("could not decode image")
+                bitmap = image
                 val ocr = TesseractOcr(context)
-                val text = runCatching { ocr.recognize(bitmap) }.also { ocr.close() }.getOrThrow()
+                val text = try {
+                    ocr.recognize(image)
+                } finally {
+                    ocr.close()
+                }
                 val target = classifyPhoto(text)
-                val path = photoCache.saveImage(bitmap)
+                val path = photoCache.saveImage(image)
                 val draft = when (target) {
                     OcrTarget.PUMP -> {
                         val (volume, cost) = extractVolumeAndCost(text, _state.value.lastInputCurrency)
@@ -185,10 +212,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         )
                     }
                 }
-                val drafts = photoCache.load() + draft
-                photoCache.save(drafts)
-                drafts
+                photoCache.append(draft)
             }
+            bitmap?.recycle()
             withContext(Dispatchers.Main) {
                 result.fold(
                     onSuccess = { drafts ->
@@ -202,48 +228,75 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun deletePhotoDraft(draft: PhotoDraft) {
-        photoCache.delete(draft)
-        _state.update { it.copy(photoDrafts = photoCache.load()) }
+    override fun deletePhotoDraft(draft: PhotoDraft) {
+        val drafts = photoCache.delete(draft)
+        _state.update { it.copy(photoDrafts = drafts) }
     }
 
-    fun clearPhotoDrafts() {
+    override fun clearPhotoDrafts() {
         photoCache.clear()
         _state.update { it.copy(photoDrafts = emptyList(), photoError = null) }
     }
 
-    fun refillsInHomeCurrency(): List<Refill> {
-        val home = _state.value.homeCurrency
-        return _state.value.refills.map { refill ->
-            val converted = _state.value.convertedCosts[refill]
-            if (refill.currency == home || converted == null) {
-                refill.copy(currency = home)
-            } else {
-                refill.copy(cost = converted, currency = home)
-            }
+    override fun retryFx() {
+        refreshFx()
+    }
+
+    override fun retryLoad() {
+        applyLoad(store.load())
+        refreshFx()
+    }
+
+    override fun exportHistory(uri: Uri) {
+        val text = if (store.canSave()) {
+            store.exportJson(_state.value.refills)
+        } else {
+            store.rawText() ?: return
+        }
+        getApplication<Application>().contentResolver.openOutputStream(uri)?.use { out ->
+            out.write(text.toByteArray())
         }
     }
 
+    override fun importHistory(uri: Uri) {
+        val text = getApplication<Application>().contentResolver.openInputStream(uri)?.use { input ->
+            input.readBytes().decodeToString()
+        } ?: return
+        val result = store.restoreFromImport(text)
+        applyLoad(result)
+        if (result is RefillLoadResult.Loaded) {
+            _state.update { it.copy(importMessage = "Imported ${result.refills.size} refill(s)") }
+            persistPrefs()
+            refreshFx()
+        } else if (result is RefillLoadResult.Failed) {
+            _state.update { it.copy(importMessage = result.message) }
+        }
+    }
+
+    override fun dismissStorageBanner() {
+        _state.update { it.copy(recoveredFromBackup = false, importMessage = null) }
+    }
+
     private fun refreshFx() {
-        viewModelScope.launch {
+        fxJob?.cancel()
+        fxJob = viewModelScope.launch {
             _state.update { it.copy(fxLoading = true, fxError = null) }
             val current = _state.value
-            val result = runCatching {
-                fxRepo.convertedCosts(current.refills, current.homeCurrency)
-            }
+            val result = fxRepo.convertedCosts(current.refills, current.homeCurrency)
+            if (!isActive) return@launch
             _state.update {
                 it.copy(
                     fxLoading = false,
-                    convertedCosts = result.getOrDefault(emptyMap()),
-                    fxError = result.exceptionOrNull()?.message,
+                    convertedCosts = result.costs,
+                    fxError = result.error,
+                    fxUnavailableCount = result.unavailableCount,
                 )
             }
         }
     }
 
-    private fun persist() {
+    private fun persistPrefs() {
         val s = _state.value
-        store.save(s.refills)
         prefs.edit()
             .putString("home_currency", s.homeCurrency)
             .putString("distance_unit", s.lastDistanceUnit.name)
@@ -251,6 +304,52 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             .putString("input_currency", s.lastInputCurrency)
             .apply()
     }
+
+    private fun persistRefills() {
+        val s = _state.value
+        if (!s.historyWritable) return
+        store.save(s.refills)
+    }
+
+    private fun applyLoad(result: RefillLoadResult) {
+        _state.update { current -> overlayLoad(current, result) }
+    }
+}
+
+private fun initialState(
+    prefs: android.content.SharedPreferences,
+    photoDrafts: List<PhotoDraft>,
+    load: RefillLoadResult,
+): UiState {
+    val base = UiState(
+        homeCurrency = prefs.getString("home_currency", null) ?: "EUR",
+        lastDistanceUnit = prefs.get("distance_unit", DistanceUnit.KM),
+        lastVolumeUnit = prefs.get("volume_unit", VolumeUnit.LITER),
+        lastInputCurrency = prefs.getString("input_currency", null) ?: "EUR",
+        photoDrafts = photoDrafts,
+    )
+    return overlayLoad(base, load)
+}
+
+private fun overlayLoad(current: UiState, load: RefillLoadResult): UiState = when (load) {
+    is RefillLoadResult.Loaded -> current.copy(
+        refills = load.refills,
+        historyWritable = true,
+        storageError = null,
+        recoveredFromBackup = load.recoveredFromBackup,
+    )
+    RefillLoadResult.Missing -> current.copy(
+        refills = emptyList(),
+        historyWritable = true,
+        storageError = null,
+        recoveredFromBackup = false,
+    )
+    is RefillLoadResult.Failed -> current.copy(
+        refills = emptyList(),
+        historyWritable = false,
+        storageError = load.message,
+        recoveredFromBackup = false,
+    )
 }
 
 private fun android.content.SharedPreferences.get(key: String, default: DistanceUnit): DistanceUnit =

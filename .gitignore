@@ -1,9 +1,12 @@
 __pycache__/
 *.pyc
 .pytest_cache/
+*.egg-info/
 .gradle/
+.kotlin/
 build/
 local.properties
+android/gradle/config.properties
 *.iml
 .idea/
 .DS_Store

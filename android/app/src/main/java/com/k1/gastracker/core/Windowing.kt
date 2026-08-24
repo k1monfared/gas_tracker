@@ -6,6 +6,9 @@ import java.time.temporal.ChronoUnit
 const val DAYS_PER_WEEK = 7.0
 const val DAYS_PER_MONTH = 28.0
 const val DAYS_PER_YEAR = 365.25
+const val MIN_RATE_REFILLS = 2
+const val MIN_RATE_COVERAGE_DAYS = 7
+const val MIN_YEARLY_EXTRAPOLATION_DAYS = 28
 
 data class WindowResult(
     val windowDays: Int,
@@ -16,6 +19,8 @@ data class WindowResult(
     val totalCost: Double?,
     val distancePerDay: Double?,
     val costPerDay: Double?,
+    val coverageDays: Int = 0,
+    val canExtrapolate: Boolean = false,
 )
 
 data class RatioMetrics(
@@ -51,6 +56,7 @@ fun recentWindow(
             windowDays = primaryDays, nRefills = 0, start = null,
             totalDistanceKm = null, totalVolumeL = 0.0, totalCost = null,
             distancePerDay = null, costPerDay = null,
+            coverageDays = 0, canExtrapolate = false,
         )
     }
 
@@ -67,21 +73,33 @@ fun recentWindow(
         }
     }
 
-    val windowDays = spanDays(chosen.minOf { it.date }, today)
+    if (chosen.isEmpty()) {
+        return WindowResult(
+            windowDays = primaryDays, nRefills = 0, start = null,
+            totalDistanceKm = null, totalVolumeL = 0.0, totalCost = null,
+            distancePerDay = null, costPerDay = null,
+            coverageDays = 0, canExtrapolate = false,
+        )
+    }
+
+    val coverageDays = spanDays(chosen.minOf { it.date }, today)
+    val canExtrapolate = chosen.size >= MIN_RATE_REFILLS && coverageDays >= MIN_RATE_COVERAGE_DAYS
     val distances = chosen.mapNotNull { it.distanceKm }
     val costs = chosen.mapNotNull { it.cost }
     val totalDistance = if (distances.isEmpty()) null else distances.sum()
     val totalCost = if (costs.isEmpty()) null else costs.sum()
 
     return WindowResult(
-        windowDays = windowDays,
+        windowDays = coverageDays,
         nRefills = chosen.size,
         start = chosen.minOf { it.date },
         totalDistanceKm = totalDistance,
         totalVolumeL = chosen.sumOf { it.volumeL },
         totalCost = totalCost,
-        distancePerDay = totalDistance?.div(windowDays),
-        costPerDay = totalCost?.div(windowDays),
+        distancePerDay = if (totalDistance != null && canExtrapolate) totalDistance / coverageDays else null,
+        costPerDay = if (totalCost != null && canExtrapolate) totalCost / coverageDays else null,
+        coverageDays = coverageDays,
+        canExtrapolate = canExtrapolate,
     )
 }
 
@@ -89,21 +107,19 @@ fun flowValue(perDay: Double?, periodDays: Double): Double? =
     perDay?.times(periodDays)
 
 fun windowRatios(samples: List<Sample>): RatioMetrics {
-    val distances = samples.mapNotNull { it.distanceKm }
-    val costs = samples.mapNotNull { it.cost }
-    val totalDistance = if (distances.isEmpty()) null else distances.sum()
     val totalVolume = samples.sumOf { it.volumeL }
-    val totalCost = if (costs.isEmpty()) null else costs.sum()
-
     if (totalVolume == 0.0) {
         return RatioMetrics(null, null, null, null, null)
     }
 
-    val kmPerL = totalDistance?.div(totalVolume)
-    val lPer100 = totalDistance?.let { totalVolume / it * 100 }
-    val mpg = totalDistance?.let { kmToMiles(it) / litersToGallons(totalVolume) }
-    val costPerKm = if (totalCost != null && totalDistance != null) totalCost / totalDistance else null
-    val avgPrice = totalCost?.div(totalVolume)
+    val paired = pairedDistanceVolume(samples)
+    val kmPerL = paired?.let { it.first / it.second }
+    val lPer100 = paired?.let { it.second / it.first * 100 }
+    val mpg = paired?.let { kmToMiles(it.first) / litersToGallons(it.second) }
+    val costPair = pairedCostDistance(samples)
+    val costPerKm = costPair?.let { it.first / it.second }
+    val priced = samples.filter { it.cost != null }
+    val avgPrice = if (priced.isEmpty()) null else priced.sumOf { it.cost!! } / priced.sumOf { it.volumeL }
 
     return RatioMetrics(kmPerL, lPer100, mpg, costPerKm, avgPrice)
 }
@@ -130,13 +146,18 @@ fun yearlyView(
     val totalDistance = if (distances.isEmpty()) null else distances.sum()
     val totalCost = if (costs.isEmpty()) null else costs.sum()
     val coverageDays = spanDays(inYear.minOf { it.date }, today)
+    val canExtrapolate = inYear.size >= MIN_RATE_REFILLS && coverageDays >= MIN_YEARLY_EXTRAPOLATION_DAYS
 
     return YearlyView(
         periodDays = yearDays,
         nRefills = inYear.size,
         actualCost = totalCost,
         actualDistanceKm = totalDistance,
-        extrapolatedCost = flowValue(totalCost?.div(coverageDays), yearDays.toDouble()),
-        extrapolatedDistanceKm = flowValue(totalDistance?.div(coverageDays), yearDays.toDouble()),
+        extrapolatedCost = if (canExtrapolate) flowValue(totalCost?.div(coverageDays), yearDays.toDouble()) else null,
+        extrapolatedDistanceKm = if (canExtrapolate) {
+            flowValue(totalDistance?.div(coverageDays), yearDays.toDouble())
+        } else {
+            null
+        },
     )
 }

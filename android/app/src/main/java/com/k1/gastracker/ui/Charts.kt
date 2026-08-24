@@ -17,6 +17,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -28,11 +30,17 @@ fun BarChart(
     labels: List<String>,
     modifier: Modifier = Modifier,
     barColor: Color = MaterialTheme.colorScheme.primary,
+    contentDescription: String? = null,
 ) {
     val axisColor = MaterialTheme.colorScheme.outlineVariant
     val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val semanticsModifier = if (contentDescription != null) {
+        modifier.semantics { this.contentDescription = contentDescription }
+    } else {
+        modifier
+    }
 
-    Column(modifier) {
+    Column(semanticsModifier) {
         Canvas(Modifier.fillMaxWidth().weight(1f)) {
             if (values.isEmpty()) return@Canvas
             val maxY = (values.maxOrNull() ?: 0.0).coerceAtLeast(1e-9)
@@ -68,11 +76,17 @@ fun LineChart(
     lineColor: Color = MaterialTheme.colorScheme.secondary,
     padStart: Dp = 16.dp,
     emptyLabel: String = "No data",
+    contentDescription: String? = null,
 ) {
     val axisColor = MaterialTheme.colorScheme.outlineVariant
     val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val semanticsModifier = if (contentDescription != null) {
+        modifier.semantics { this.contentDescription = contentDescription }
+    } else {
+        modifier
+    }
 
-    Column(modifier) {
+    Column(semanticsModifier) {
         Box(Modifier.fillMaxWidth().weight(1f)) {
             Canvas(Modifier.fillMaxWidth().matchParentSize()) {
                 when {
@@ -167,7 +181,7 @@ private fun AxisLabels(labels: List<String>, color: Color) {
         labels.forEach { l ->
             Text(
                 l,
-                fontSize = 9.sp,
+                fontSize = 12.sp,
                 color = color,
                 textAlign = TextAlign.Center,
                 maxLines = 1,
@@ -185,7 +199,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawAxisText(
 ) {
     val paint = android.graphics.Paint().apply {
         this.color = color.toArgb()
-        textSize = 9.sp.toPx()
+        textSize = 12.sp.toPx()
         isAntiAlias = true
     }
     drawContext.canvas.nativeCanvas.drawText(text, x, y, paint)

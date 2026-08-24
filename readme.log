@@ -18,7 +18,8 @@ Milestones
    - Same-day merges work with odometer readings.
 
 3. Photo / OCR entry
-   - Tesseract OCR runs on-device; `eng.traineddata` is bundled in the APK.
+   - Tesseract OCR runs on-device; standard `eng.traineddata` is bundled gzip-compressed
+     and decompressed into `files/tessdata/` on first use.
    - User can take a photo with the camera or pick from the gallery.
    - Photos are auto-classified as pump, odometer, or receipt using OCR-text heuristics.
    - Extracted numbers are shown as cached drafts at the top of the Log form and prefilled into the fields.
@@ -26,22 +27,28 @@ Milestones
    - Drafts are cleared when the refill is saved or editing is cancelled.
    - Receipts are detected but extra fields (station, items) are not yet extracted.
 
+4. Reliability (v0.3.0)
+   - Versioned refill JSON, backup file, fail-closed loads, export/import.
+   - FX failures stay unavailable; consumption uses paired distance/volume; sparse windows do not extrapolate.
+   - Privacy and backup rules, accessibility strings, and CI.
+   - APK size: gzipped OCR model, compressed JNI, drop 32-bit x86, release R8.
+
 Notes
 
-- The bundled Tesseract model makes the debug APK about 66 MB.
 - Camera capture is implemented via a FileProvider; it works on real devices. The emulator camera app on the test AVD crashes, so camera was verified via intent setup and gallery flow only on the emulator.
 - OCR classification is rule-based and can be improved with more samples.
 
 Building and testing
 
 Python (repo root):
+  python3 -m pip install -e ".[test]"
   python3 -m pytest -q
 
-Android (from android/):
-  ./gradlew -Dorg.gradle.java.home=/tmp/opencode/jdk-21.0.12.1+1 :app:testDebugUnitTest :app:assembleDebug
+Android (from android/, JDK 21):
+  ./gradlew :app:testDebugUnitTest :app:assembleDebug
 
-Instrumented test (emulator must be running):
-  ./gradlew -Dorg.gradle.java.home=/tmp/opencode/jdk-21.0.12.1+1 :app:connectedDebugAndroidTest
+Instrumented test (emulator must be running; not part of CI):
+  ./gradlew :app:connectedDebugAndroidTest
 
 Debug APK output:
   android/app/build/outputs/apk/debug/app-debug.apk

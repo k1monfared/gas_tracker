@@ -102,6 +102,28 @@ def test_yearly_view_empty():
     assert view.actual_cost is None
 
 
+def test_single_refill_does_not_extrapolate():
+    today = dt.date(2026, 8, 21)
+    result = recent_window([s("2026-08-21", 40, 500, 80)], today)
+    assert result.n_refills == 1
+    assert result.can_extrapolate is False
+    assert result.cost_per_day is None
+    view = yearly_view([s("2026-08-21", 40, 500, 80)], today)
+    assert view.actual_cost == 80
+    assert view.extrapolated_cost is None
+
+
+def test_window_ratios_partial_distance():
+    ratios = window_ratios(
+        [
+            s("2026-01-01", 40, None, 80),
+            s("2026-02-01", 40, 500, 80),
+        ]
+    )
+    assert ratios.l_per_100_km == 8.0
+    assert ratios.cost_per_km == 0.16
+
+
 def test_octane_and_station_roundtrip():
     r = Refill(
         date=dt.date(2026, 8, 21),
